@@ -13,6 +13,8 @@ let treeTops = [];
 let cloudGroups = [];
 let dustPuffs = [];
 let worldStar = null;
+let carBodyMesh = null;
+let carCabinMesh = null;
 const CAMERA_FOLLOW_OFFSET = { x: -14, y: 18, z: 14 };
 const CAMERA_TILT_X = -0.72;
 const CAMERA_YAW_Y = -0.78;
@@ -447,25 +449,26 @@ function makeIconBadge(sub) {
 function buildCar() {
   carGroup = new THREE.Group();
   const ch = getChild();
-  const bodyColor = new THREE.Color(ch.color);
+  const carColor = ch.carColor || ch.color;
+  const bodyColor = new THREE.Color(carColor);
 
   // Body
-  const body = new THREE.Mesh(
+  carBodyMesh = new THREE.Mesh(
     new THREE.BoxGeometry(1.1, 0.55, 2.1),
     new THREE.MeshLambertMaterial({ color: bodyColor })
   );
-  body.position.y = 0.52;
-  body.castShadow = true;
-  carGroup.add(body);
+  carBodyMesh.position.y = 0.52;
+  carBodyMesh.castShadow = true;
+  carGroup.add(carBodyMesh);
 
   // Cabin
-  const cabin = new THREE.Mesh(
+  carCabinMesh = new THREE.Mesh(
     new THREE.BoxGeometry(0.85, 0.42, 1.1),
-    new THREE.MeshLambertMaterial({ color: new THREE.Color(ch.color).lerp(new THREE.Color(0xffffff), 0.25) })
+    new THREE.MeshLambertMaterial({ color: new THREE.Color(carColor).lerp(new THREE.Color(0xffffff), 0.25) })
   );
-  cabin.position.set(0, 0.97, -0.1);
-  cabin.castShadow = true;
-  carGroup.add(cabin);
+  carCabinMesh.position.set(0, 0.97, -0.1);
+  carCabinMesh.castShadow = true;
+  carGroup.add(carCabinMesh);
 
   // Windshield
   const ws = new THREE.Mesh(
@@ -504,6 +507,15 @@ function buildCar() {
 
   carGroup.position.set(0, 0, 3);
   scene.add(carGroup);
+}
+
+function rebuildCar() {
+  if (!scene) return;
+  if (carGroup) scene.remove(carGroup);
+  carGroup = null;
+  carVel = 0;
+  carAngle = 0;
+  buildCar();
 }
 
 function bindInput() {

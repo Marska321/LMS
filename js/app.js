@@ -5,6 +5,8 @@ const DEFAULT_CHILDREN = [
   { id:'child-1', name:'Joshua', grade:6, initials:'JD', color:'#2d6a4f' },
   { id:'child-2', name:'Elijah', grade:4, initials:'ED', color:'#1d6fa4' },
 ];
+const CAR_COLOR_OPTIONS = ['#FF4444','#4488FF','#44BB44','#FFAA00','#AA44FF','#FF88AA','#44DDDD','#FFEE44'];
+const DEFAULT_CAR_NAME = 'Road Runner';
 
 function loadState() {
   try { return JSON.parse(localStorage.getItem('hs-state')) || {}; } catch{ return {}; }
@@ -18,6 +20,12 @@ if (!STATE.xp) STATE.xp = {};               // { childId: number }
 if (!STATE.portfolio) STATE.portfolio = {};  // { childId: [] }
 if (!STATE.log) STATE.log = {};              // { childId: [] }
 if (!STATE.pin) STATE.pin = '1234';
+STATE.children = STATE.children.map((child, index) => ({
+  ...child,
+  carColor: child.carColor || child.color || CAR_COLOR_OPTIONS[index % CAR_COLOR_OPTIONS.length],
+  carName: child.carName || DEFAULT_CAR_NAME,
+  carSetupDone: Boolean(child.carSetupDone),
+}));
 
 let activeChildId = null;
 let activeSubject = null;
@@ -27,12 +35,16 @@ let currentScreen = 'intro';
 let parentModeUnlocked = false;
 let pendingParentAction = null;
 let parentPinEntry = '';
+let pendingCarSetupMandatory = false;
+let selectedCarColor = CAR_COLOR_OPTIONS[0];
 
 const PARENT_SCREENS = ['dash', 'portfolio', 'log'];
 
 function getChild() { return STATE.children.find(c => c.id === activeChildId); }
 function getProgress(childId) { return STATE.progress[childId] || {}; }
 function isParentScreen(id) { return PARENT_SCREENS.includes(id); }
+function getCarName(child) { return child?.carName || DEFAULT_CAR_NAME; }
+function getCarColor(child) { return child?.carColor || child?.color || CAR_COLOR_OPTIONS[0]; }
 
 function setTopicState(childId, topicId, val) {
   if (!STATE.progress[childId]) STATE.progress[childId] = {};
@@ -93,7 +105,16 @@ function addChild() {
   const initials = name.substring(0,2).toUpperCase();
   const colors = ['#2d6a4f','#1d6fa4','#6b4fbb','#e9961a','#c0392b'];
   const col = colors[STATE.children.length % colors.length];
-  const ch = { id: 'child-' + Date.now(), name, grade, initials, color: col };
+  const ch = {
+    id: 'child-' + Date.now(),
+    name,
+    grade,
+    initials,
+    color: col,
+    carColor: CAR_COLOR_OPTIONS[STATE.children.length % CAR_COLOR_OPTIONS.length],
+    carName: DEFAULT_CAR_NAME,
+    carSetupDone: false,
+  };
   STATE.children.push(ch);
   saveState(STATE);
   renderIntro();
@@ -105,6 +126,7 @@ function enterWorld() {
   const ch = getChild();
   document.getElementById('hud-child-name').textContent = ch.name + '\'s World';
   document.getElementById('hud-child-grade').textContent = 'Grade ' + ch.grade + ' · CAPS';
+  document.getElementById('hud-car-name').textContent = 'Car: ' + getCarName(ch);
   updateHUD();
   if (!worldReady) {
     const worldStarted = initWorld();
@@ -114,6 +136,7 @@ function enterWorld() {
     }
   }
   showScreen('world');
+  maybeOpenCarSetup();
 }
 
 function goToWorld() {
@@ -523,6 +546,7 @@ function updateHUD() {
   const ch = getChild();
   const xp = STATE.xp[ch.id] || 0;
   const { done } = calcTotals(ch.id, ch.grade);
+  document.getElementById('hud-car-name').textContent = 'Car: ' + getCarName(ch);
   document.getElementById('hud-xp').textContent = xp;
   document.getElementById('hud-done').textContent = done;
 }
@@ -561,6 +585,7 @@ function closeModal(id) {
 }
 function closeModalOutside(e, id) {
   if (e.target !== document.getElementById('modal-' + id)) return;
+  if (id === 'car-setup' && pendingCarSetupMandatory) return;
   closeModal(id);
   if (id === 'parent-pin') {
     resetParentPin();
@@ -584,6 +609,86 @@ function runParentAction(action) {
   if (action.type === 'screen') {
     showScreen(action.id, { bypassParentGate: true });
   }
+}
+
+function renderCarSetup(forceOpen = false) {
+  const child = getChild();
+  if (!child) return;
+
+  pendingCarSetupMandatory = forceOpen;
+  selectedCarColor = getCarColor(child);
+
+  document.getElementById('car-setup-subtitle').textContent = forceOpen
+    ? child.name + ', pick a colour and name for your car before you start driving.'
+    : 'Update ' + child.name + '\'s car colour and name.';
+
+  document.getElementById('car-setup-cancel').style.display = forceOpen ? 'none' : 'inline-flex';
+
+  const grid = document.getElementById('car-color-grid');
+  grid.innerHTML = '';
+  CAR_COLOR_OPTIONS.forEach(color => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'car-color-swatch' + (color === selectedCarColor ? ' selected' : '');
+    btn.style.background = color;
+    btn.onclick = () => {
+      selectedCarColor = color;
+      renderCarSetup(forceOpen);
+    };
+    grid.appendChild(btn);
+  });
+
+  const input = document.getElementById('car-name-input');
+  input.value = getCarName(child);
+  input.oninput = updateCarPreview;
+  updateCarPreview();
+
+  document.getElementById('modal-car-setup').classList.remove('hidden');
+  setTimeout(() => {
+    input.focus();
+    input.select();
+  }, 0);
+}
+
+function updateCarPreview() {
+  const input = document.getElementById('car-name-input');
+  const nextName = (input.value || '').trim() || DEFAULT_CAR_NAME;
+  document.getElementById('car-preview-title').textContent = nextName;
+  document.getElementById('car-preview-chip').style.background = selectedCarColor;
+}
+
+function maybeOpenCarSetup() {
+  const child = getChild();
+  if (!child || child.carSetupDone) return;
+  renderCarSetup(true);
+}
+
+function openCarSetupFromSettings() {
+  renderCarSetup(false);
+}
+
+function closeCarSetup() {
+  if (pendingCarSetupMandatory) return;
+  closeModal('car-setup');
+}
+
+function saveCarSetup() {
+  const child = getChild();
+  if (!child) return;
+
+  const nextName = (document.getElementById('car-name-input').value || '').trim().slice(0, 16) || DEFAULT_CAR_NAME;
+  child.carColor = selectedCarColor;
+  child.carName = nextName;
+  child.carSetupDone = true;
+  saveState(STATE);
+
+  pendingCarSetupMandatory = false;
+  document.getElementById('hud-car-name').textContent = 'Car: ' + nextName;
+  closeModal('car-setup');
+
+  if (typeof rebuildCar === 'function') rebuildCar();
+  renderIntro();
+  if (parentModeUnlocked) renderSettings();
 }
 
 function resetParentPinHint() {
@@ -696,6 +801,11 @@ function renderSettings() {
       <div class="settings-icon">📡</div>
       <div class="settings-label">Offline mode</div>
       <div class="settings-value">✅ Ready</div>
+    </div>
+    <div class="settings-row" onclick="openCarSetupFromSettings()" style="cursor:pointer">
+      <div class="settings-icon">🚗</div>
+      <div class="settings-label">Car customisation</div>
+      <div class="settings-value">${getCarName(ch)} →</div>
     </div>
     <div class="settings-row" onclick="changeParentPin()" style="cursor:pointer">
       <div class="settings-icon">🔢</div>
