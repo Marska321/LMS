@@ -52,6 +52,9 @@ html,body{height:100%;overflow:hidden;font-family:'Georgia',serif;background:#1a
 .hud-name{font-size:16px;font-weight:700;letter-spacing:-.3px}
 .hud-sub{font-size:11px;opacity:.6;font-family:sans-serif;margin-top:2px}
 .hud-car-name{font-size:11px;opacity:.78;font-family:sans-serif;margin-top:5px;color:#dcefe4}
+.hud-streak{display:inline-flex;align-items:center;gap:5px;margin-top:6px;padding:3px 9px;border-radius:999px;
+  background:rgba(255,170,0,.18);color:#ffd38b;font-family:sans-serif;font-size:11px;font-weight:700}
+.hud-streak.hidden{display:none}
 .hud-xp{font-size:12px;margin-top:5px;font-family:sans-serif;opacity:.8}
 .hud-xp span{color:#ffd700;font-weight:700}
 .hud-controls{text-align:right}

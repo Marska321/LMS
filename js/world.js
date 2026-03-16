@@ -15,6 +15,9 @@ let dustPuffs = [];
 let worldStar = null;
 let carBodyMesh = null;
 let carCabinMesh = null;
+let sunLight = null;
+let ambientLight = null;
+let fillLight = null;
 const CAMERA_FOLLOW_OFFSET = { x: -14, y: 18, z: 14 };
 const CAMERA_TILT_X = -0.72;
 const CAMERA_YAW_Y = -0.78;
@@ -51,21 +54,22 @@ function initWorld() {
     camLookAt = new THREE.Vector3();
 
     // Lighting
-    const sun = new THREE.DirectionalLight(0xfff8e8, 1.5);
-    sun.position.set(25, 35, 20);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = sun.shadow.camera.bottom = -45;
-    sun.shadow.camera.right = sun.shadow.camera.top = 45;
-    sun.shadow.camera.far = 130;
-    scene.add(sun);
-    scene.add(new THREE.AmbientLight(0xc8d8ff, 0.75));
-    const fill = new THREE.DirectionalLight(0xffffff, 0.3);
-    fill.position.set(-10, 5, -10);
-    scene.add(fill);
-
+    sunLight = new THREE.DirectionalLight(0xfff8e8, 1.5);
+    sunLight.position.set(25, 35, 20);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.set(2048, 2048);
+    sunLight.shadow.camera.left = sunLight.shadow.camera.bottom = -45;
+    sunLight.shadow.camera.right = sunLight.shadow.camera.top = 45;
+    sunLight.shadow.camera.far = 130;
+    scene.add(sunLight);
+    ambientLight = new THREE.AmbientLight(0xc8d8ff, 0.75);
+    scene.add(ambientLight);
+    fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+    fillLight.position.set(-10, 5, -10);
+    scene.add(fillLight);
     buildScene();
     buildCar();
+    applyWeather();
     bindInput();
     animate();
     window.addEventListener('resize', onResize);
@@ -247,6 +251,70 @@ function makeClouds() {
       phase: idx * 0.8 + Math.random(),
     });
   });
+}
+
+function applyWeather() {
+  if (!scene) return;
+  const child = typeof getChild === 'function' ? getChild() : null;
+  const weather = child && typeof getWeatherState === 'function'
+    ? getWeatherState(child.id)
+    : { mode: 'sunny', streak: 0, daysSinceLastLog: 0 };
+
+  const profiles = {
+    sunny: {
+      sky: 0x87ceeb,
+      fogNear: 35,
+      fogFar: 90,
+      sun: 1.5,
+      ambient: 0.75,
+      fill: 0.3,
+      cloudOpacity: 0.78,
+    },
+    'partly-cloudy': {
+      sky: 0xa8c4d4,
+      fogNear: 30,
+      fogFar: 70,
+      sun: 1.2,
+      ambient: 0.68,
+      fill: 0.24,
+      cloudOpacity: 0.86,
+    },
+    overcast: {
+      sky: 0x8899aa,
+      fogNear: 24,
+      fogFar: 55,
+      sun: 0.9,
+      ambient: 0.58,
+      fill: 0.2,
+      cloudOpacity: 0.92,
+    },
+    rainy: {
+      sky: 0x667788,
+      fogNear: 20,
+      fogFar: 45,
+      sun: 0.6,
+      ambient: 0.48,
+      fill: 0.14,
+      cloudOpacity: 0.98,
+    },
+  };
+
+  const profile = profiles[weather.mode] || profiles.sunny;
+  scene.background = new THREE.Color(profile.sky);
+  scene.fog = new THREE.Fog(profile.sky, profile.fogNear, profile.fogFar);
+  if (sunLight) sunLight.intensity = profile.sun;
+  if (ambientLight) ambientLight.intensity = profile.ambient;
+  if (fillLight) fillLight.intensity = profile.fill;
+
+  cloudGroups.forEach(cloud => {
+    cloud.group.children.forEach(puff => {
+      if (puff.material) puff.material.opacity = profile.cloudOpacity;
+    });
+  });
+}
+
+function refreshWeather() {
+  applyWeather();
 }
 
 function makeBuilding(name, sub, x, z, progPct) {

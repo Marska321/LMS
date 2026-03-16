@@ -45,6 +45,58 @@ function getProgress(childId) { return STATE.progress[childId] || {}; }
 function isParentScreen(id) { return PARENT_SCREENS.includes(id); }
 function getCarName(child) { return child?.carName || DEFAULT_CAR_NAME; }
 function getCarColor(child) { return child?.carColor || child?.color || CAR_COLOR_OPTIONS[0]; }
+function getLocalDateParts(date = new Date()) {
+  return {
+    year: date.getFullYear(),
+    month: date.getMonth(),
+    day: date.getDate(),
+  };
+}
+function toLocalISODate(date = new Date()) {
+  const { year, month, day } = getLocalDateParts(date);
+  return [
+    String(year).padStart(4, '0'),
+    String(month + 1).padStart(2, '0'),
+    String(day).padStart(2, '0'),
+  ].join('-');
+}
+function fromISODate(dateStr) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr || '')) return null;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function getUniqueLogDates(childId) {
+  const entries = STATE.log[childId] || [];
+  return [...new Set(entries.map(entry => entry.date).filter(Boolean))]
+    .filter(dateStr => fromISODate(dateStr))
+    .sort((a, b) => fromISODate(b) - fromISODate(a));
+}
+function getStudyStreak(childId) {
+  const dates = new Set(getUniqueLogDates(childId));
+  let streak = 0;
+  let cursor = new Date();
+  while (dates.has(toLocalISODate(cursor))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+function getDaysSinceLastLog(childId) {
+  const latest = getUniqueLogDates(childId)[0];
+  if (!latest) return Infinity;
+  const latestDate = fromISODate(latest);
+  const today = fromISODate(toLocalISODate());
+  return Math.floor((today - latestDate) / 86400000);
+}
+function getWeatherState(childId) {
+  const streak = getStudyStreak(childId);
+  const daysSinceLastLog = getDaysSinceLastLog(childId);
+  let mode = 'overcast';
+  if (daysSinceLastLog >= 3) mode = 'rainy';
+  else if (streak >= 3) mode = 'sunny';
+  else if (streak >= 1) mode = 'partly-cloudy';
+  return { streak, daysSinceLastLog, mode };
+}
 
 function setTopicState(childId, topicId, val) {
   if (!STATE.progress[childId]) STATE.progress[childId] = {};
@@ -136,6 +188,7 @@ function enterWorld() {
     }
   }
   showScreen('world');
+  if (typeof refreshWeather === 'function') refreshWeather();
   maybeOpenCarSetup();
 }
 
@@ -529,12 +582,23 @@ function logToday() {
   const notes = prompt('Any notes about what was covered?') || '';
   const ch = getChild();
   if (!STATE.log[ch.id]) STATE.log[ch.id] = [];
-  STATE.log[ch.id].unshift({
-    date: new Date().toISOString().split('T')[0],
-    subjects: subj, time, mood: '😊 ' + mood, notes
-  });
+  const today = toLocalISODate();
+  const existing = STATE.log[ch.id].find(entry => entry.date === today);
+  if (existing) {
+    existing.subjects = subj;
+    existing.time = time;
+    existing.mood = '😊 ' + mood;
+    existing.notes = notes;
+  } else {
+    STATE.log[ch.id].unshift({
+      date: today,
+      subjects: subj, time, mood: '😊 ' + mood, notes
+    });
+  }
   saveState(STATE);
   renderLog();
+  updateHUD();
+  if (typeof refreshWeather === 'function') refreshWeather();
   showXPToast(5);
 }
 
@@ -546,7 +610,15 @@ function updateHUD() {
   const ch = getChild();
   const xp = STATE.xp[ch.id] || 0;
   const { done } = calcTotals(ch.id, ch.grade);
+  const weather = getWeatherState(ch.id);
   document.getElementById('hud-car-name').textContent = 'Car: ' + getCarName(ch);
+  const streakEl = document.getElementById('hud-streak');
+  if (weather.streak >= 2) {
+    streakEl.textContent = '🔥 ' + weather.streak + '-day streak';
+    streakEl.classList.remove('hidden');
+  } else {
+    streakEl.classList.add('hidden');
+  }
   document.getElementById('hud-xp').textContent = xp;
   document.getElementById('hud-done').textContent = done;
 }
