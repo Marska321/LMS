@@ -50,9 +50,16 @@ python3 -m http.server 8080 --bind 0.0.0.0
 
 ```
 homeschool-lms/
-├── index.html          ← Main app (entire LMS + 3D world)
+├── index.html          ← App shell / screens
 ├── sw.js               ← Service worker (offline caching)
 ├── manifest.json       ← PWA manifest (installability)
+├── lib/
+│   └── three.min.js    ← Local Three.js runtime for offline boot
+├── css/
+│   └── app.css         ← App styling
+├── js/
+│   ├── app.js          ← LMS, state, dashboard, settings
+│   └── world.js        ← 3D world logic
 ├── parent-dashboard/
 │   └── index.html      ← PIN-protected parent/admin dashboard
 ├── data/
@@ -117,14 +124,8 @@ On the intro screen, tap **"Add Child"** and enter the name and grade. Each chil
 
 ## 🗺 Expanding the World
 
-The 3D world uses Three.js (r128, loaded from CDN — or download for full offline use).
-The building positions and subject mappings are in `index.html` — look for `BUILDING_POSITIONS` and `WORLD_SUBJECTS_ORDER` to customise.
-
-For full offline use including Three.js:
-```bash
-curl -o three.min.js https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js
-```
-Then change the script tag in `index.html` from the CDN URL to `./three.min.js`.
+The 3D world uses a local copy of Three.js (`r128`) at `lib/three.min.js`, so the app can boot without fetching the runtime from a CDN.
+The world logic lives in `js/world.js`; app and LMS state live in `js/app.js`.
 
 ---
 

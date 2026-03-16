@@ -46,7 +46,7 @@ Goal from source: produce a rock-solid offline PWA with no CDN dependencies, PIN
 
 | ID | Task | Status | Repo-aware note |
 | --- | --- | --- | --- |
-| T1.1 | Bundle Three.js locally and remove CDN dependency | `Todo` | Still missing. [index.html](/C:/Users/User/LMS/index.html) loads Three.js from a CDN, so full offline cold-start is not yet achieved. |
+| T1.1 | Bundle Three.js locally and remove CDN dependency | `Done` | Completed via [lib/three.min.js](/C:/Users/User/LMS/lib/three.min.js), [index.html](/C:/Users/User/LMS/index.html), and [sw.js](/C:/Users/User/LMS/sw.js). The app no longer depends on the CDN for Three.js boot. |
 | T1.2 | Child mode vs parent mode PIN separation inside the main app world flow | `Partial` | Parent PIN exists in [parent-dashboard/index.html](/C:/Users/User/LMS/parent-dashboard/index.html), but the lock-in-world HUD flow described in the task has not been built in the main app. |
 | T1.3 | Car colour and car name customisation per child | `Todo` | No persistent car customisation flow or per-child car setup state is present in [js/app.js](/C:/Users/User/LMS/js/app.js) or [js/world.js](/C:/Users/User/LMS/js/world.js). |
 | T1.4 | Weather system tied to study streak | `Todo` | The world has atmosphere and clouds, but there is no streak-driven weather calculation tied to log history. |

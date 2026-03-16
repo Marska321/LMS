@@ -1,4 +1,4 @@
-const CACHE = 'homeschool-lms-v3';
+const CACHE = 'homeschool-lms-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -7,6 +7,7 @@ const ASSETS = [
   './js/app.js?v=3',
   './js/world.js?v=3',
   './data/curriculum.js?v=3',
+  './lib/three.min.js',
 ];
 
 self.addEventListener('install', e => {
