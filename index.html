@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1a1a2e">
+<meta name="description" content="HomeSchool Hub — CAPS Learning World">
+<title>HomeSchool Hub 🌿</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════
+     SCREEN 1: INTRO / Child Select
+═════════════════════════════════════════════════════ -->
+<div id="screen-intro" class="screen">
+  <div class="intro-logo">🌿</div>
+  <div class="intro-title">HomeSchool Hub</div>
+  <div class="intro-sub">CAPS · PRIVATE · OFFLINE</div>
+
+  <div class="child-cards" id="child-cards-container"></div>
+
+  <button class="intro-btn" id="enter-world-btn" disabled onclick="enterWorld()">
+    🚗 Enter Learning World
+  </button>
+  <div class="popia-note">
+    All data is stored on this device only.<br>
+    No internet required. POPIA compliant — your family's privacy is protected.
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     SCREEN 2: 3D WORLD
+═════════════════════════════════════════════════════ -->
+<div id="screen-world" class="screen hidden">
+  <canvas id="world-canvas"></canvas>
+  <div class="world-hud">
+    <div class="hud-top">
+      <div class="hud-card">
+        <div class="hud-name" id="hud-child-name">Joshua</div>
+        <div class="hud-sub" id="hud-child-grade">Grade 6 · CAPS</div>
+        <div class="hud-xp">⭐ <span id="hud-xp">0</span> XP · <span id="hud-done">0</span> topics</div>
+      </div>
+      <div class="hud-card hud-controls">
+        <div>Arrow keys / WASD to drive</div>
+        <div>Space / Enter to go inside</div>
+        <div style="margin-top:4px;opacity:.5">📊 Tab → Dashboard</div>
+      </div>
+    </div>
+
+    <!-- Approach prompt -->
+    <div class="approach-bar hidden" id="approach-bar">
+      <div class="approach-name" id="approach-name">📐 Mathematics</div>
+      <div class="approach-hint">Press <kbd>Space</kbd> or tap button to enter</div>
+    </div>
+
+    <!-- Enter button (always visible when near) -->
+    <button class="enter-btn-world" id="world-enter-btn" onclick="enterSubjectFromWorld()">
+      Enter →
+    </button>
+
+    <!-- D-pad -->
+    <div class="dpad">
+      <div class="dpad-row"><button class="dpad-btn" id="d-up">▲</button></div>
+      <div class="dpad-row">
+        <button class="dpad-btn" id="d-left">◀</button>
+        <button class="dpad-btn" id="d-down">▼</button>
+        <button class="dpad-btn" id="d-right">▶</button>
+      </div>
+    </div>
+
+    <!-- Minimap -->
+    <div class="minimap">
+      <canvas id="minimap-canvas" width="110" height="110"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     SCREEN 3: SUBJECT LMS
+═════════════════════════════════════════════════════ -->
+<div id="screen-lms" class="screen hidden">
+  <div class="lms-topbar">
+    <button class="back-btn" onclick="showScreen('world')">← World</button>
+    <div class="lms-subject-icon" id="lms-icon">📐</div>
+    <div class="lms-subject-title" id="lms-title">Mathematics</div>
+    <button class="back-btn" onclick="showScreen('dash')" style="font-size:12px">📊 Overview</button>
+  </div>
+  <div class="lms-body" id="lms-body"></div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     SCREEN 4: DASHBOARD OVERVIEW
+═════════════════════════════════════════════════════ -->
+<div id="screen-dash" class="screen hidden">
+  <div class="lms-topbar">
+    <button class="back-btn" onclick="showScreen('world')">← World</button>
+    <div class="lms-subject-title">Overview</div>
+    <button class="back-btn" onclick="showModal('settings')">⚙️</button>
+  </div>
+  <div id="dash-body" style="overflow-y:auto;flex:1;padding:16px"></div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     SCREEN 5: PORTFOLIO
+═════════════════════════════════════════════════════ -->
+<div id="screen-portfolio" class="screen hidden">
+  <div class="lms-topbar">
+    <button class="back-btn" onclick="showScreen('dash')">← Overview</button>
+    <div class="lms-subject-title">Portfolio 📁</div>
+    <button class="back-btn" onclick="exportPortfolio()" style="font-size:12px">Export PDF</button>
+  </div>
+  <div id="portfolio-body" style="overflow-y:auto;flex:1;padding:16px"></div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     SCREEN 6: LOG
+═════════════════════════════════════════════════════ -->
+<div id="screen-log" class="screen hidden">
+  <div class="lms-topbar">
+    <button class="back-btn" onclick="showScreen('dash')">← Overview</button>
+    <div class="lms-subject-title">Learning Log 📅</div>
+    <button class="back-btn" onclick="logToday()" style="color:var(--green);border-color:var(--green)">+ Log Today</button>
+  </div>
+  <div id="log-body" style="overflow-y:auto;flex:1;padding:16px"></div>
+</div>
+
+<!-- Bottom nav (shown on lms/dash/portfolio/log screens) -->
+<div class="bottom-nav" id="bottom-nav" style="display:none">
+  <button class="nav-btn" id="nav-world" onclick="showScreen('world')">
+    <span class="nav-btn-icon">🌍</span><span>World</span>
+  </button>
+  <button class="nav-btn active" id="nav-dash" onclick="showScreen('dash')">
+    <span class="nav-btn-icon">📊</span><span>Overview</span>
+  </button>
+  <button class="nav-btn" id="nav-portfolio" onclick="showScreen('portfolio')">
+    <span class="nav-btn-icon">📁</span><span>Portfolio</span>
+  </button>
+  <button class="nav-btn" id="nav-log" onclick="showScreen('log')">
+    <span class="nav-btn-icon">📅</span><span>Log</span>
+  </button>
+  <button class="nav-btn" id="nav-settings" onclick="showModal('settings')">
+    <span class="nav-btn-icon">⚙️</span><span>Settings</span>
+  </button>
+</div>
+
+<!-- XP toast -->
+<div class="xp-toast" id="xp-toast">+10 XP ⭐</div>
+
+<!-- Settings modal -->
+<div class="modal-overlay hidden" id="modal-settings" onclick="closeModalOutside(event,'settings')">
+  <div class="modal-sheet" id="settings-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Settings</div>
+    <div id="settings-body"></div>
+  </div>
+</div>
+
+<!-- ═══════════ SCRIPTS ═══════════ -->
+<script src="data/curriculum.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/app.js"></script>
+<script src="js/world.js"></script>
+</body>
+</html>
