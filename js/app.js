@@ -41,6 +41,7 @@ let selectedCarColor = CAR_COLOR_OPTIONS[0];
 let pendingWorldEffects = [];
 let deferredInstallPrompt = null;
 let installPromptAvailable = false;
+let worldBooting = false;
 
 const PARENT_SCREENS = ['dash', 'portfolio', 'log'];
 
@@ -238,28 +239,44 @@ function addChild() {
   selectChild(ch.id);
 }
 
-function enterWorld() {
+async function enterWorld() {
   if (!activeChildId) return;
+  if (worldBooting) return;
+  worldBooting = true;
   const ch = getChild();
   syncMilestones(ch.id);
   document.getElementById('hud-child-name').textContent = ch.name + '\'s World';
   document.getElementById('hud-child-grade').textContent = 'Grade ' + ch.grade + ' · CAPS';
   document.getElementById('hud-car-name').textContent = 'Car: ' + getCarName(ch);
   updateHUD();
-  if (!worldReady) {
-    const worldStarted = initWorld();
-    if (!worldStarted) {
-      showWorldFallback();
-      return;
-    }
-  } else if (typeof resetWorldForActiveChild === 'function') {
-    resetWorldForActiveChild();
+  const enterBtn = document.getElementById('enter-world-btn');
+  const previousLabel = enterBtn ? enterBtn.textContent : '';
+  if (enterBtn) {
+    enterBtn.disabled = true;
+    enterBtn.textContent = 'Loading world...';
   }
-  showScreen('world');
-  if (typeof refreshWeather === 'function') refreshWeather();
-  if (typeof refreshWorldMilestones === 'function') refreshWorldMilestones();
-  flushPendingWorldEffects();
-  maybeOpenCarSetup();
+  try {
+    if (!worldReady) {
+      const worldStarted = await initWorld();
+      if (!worldStarted) {
+        showWorldFallback();
+        return;
+      }
+    } else if (typeof resetWorldForActiveChild === 'function') {
+      resetWorldForActiveChild();
+    }
+    showScreen('world');
+    if (typeof refreshWeather === 'function') refreshWeather();
+    if (typeof refreshWorldMilestones === 'function') refreshWorldMilestones();
+    flushPendingWorldEffects();
+    maybeOpenCarSetup();
+  } finally {
+    worldBooting = false;
+    if (enterBtn) {
+      enterBtn.disabled = false;
+      enterBtn.textContent = previousLabel || '🚗 Enter Learning World';
+    }
+  }
 }
 
 function goToWorld() {
@@ -1079,7 +1096,7 @@ function resetProgress() {
    SERVICE WORKER REGISTRATION
 ════════════════════════════════════════════════════════ */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js?v=4', { updateViaCache: 'none' }).catch(() => {});
+  navigator.serviceWorker.register('./sw.js?v=5', { updateViaCache: 'none' }).catch(() => {});
 }
 
 window.addEventListener('beforeinstallprompt', e => {
