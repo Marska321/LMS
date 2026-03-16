@@ -18,10 +18,20 @@ let carCabinMesh = null;
 let sunLight = null;
 let ambientLight = null;
 let fillLight = null;
+let activeFireworks = [];
+let activeWorldBursts = [];
+let milestoneDecor = {
+  palms: [],
+  fountain: null,
+  banners: [],
+};
 const CAMERA_FOLLOW_OFFSET = { x: -14, y: 18, z: 14 };
 const CAMERA_TILT_X = -0.72;
 const CAMERA_YAW_Y = -0.78;
 const TREE_GRID_STEPS = [-18, -14, -10, -6, 6, 10, 14, 18];
+const PALM_TREE_POSITIONS = [
+  [-19, -5], [-17, 9], [18, -8], [16, 12]
+];
 const WORLD_SUBJECTS_ORDER = [
   'Mathematics','Natural Sciences','English HL','Social Sciences','Afrikaans FAL','Life Skills'
 ];
@@ -93,6 +103,7 @@ function buildScene() {
   treeTops = [];
   cloudGroups = [];
   dustPuffs = [];
+  milestoneDecor = { palms: [], fountain: null, banners: [] };
 
   // Ground
   const ground = new THREE.Mesh(
@@ -143,20 +154,8 @@ function buildScene() {
     buildingMeshes.push(makeBuilding(name, sub, pos.x, pos.z, prog));
   });
 
-  // Central fountain/star
-  const base = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.2, 1.4, 0.3, 12),
-    new THREE.MeshLambertMaterial({ color: 0xccbbaa })
-  );
-  base.position.set(0, 0.15, 0);
-  base.castShadow = true;
-  scene.add(base);
-  worldStar = new THREE.Mesh(
-    new THREE.SphereGeometry(0.35, 8, 8),
-    new THREE.MeshLambertMaterial({ color: 0xffd700 })
-  );
-  worldStar.position.set(0, 0.7, 0);
-  scene.add(worldStar);
+  buildTownCenter();
+  applyMilestoneWorldState();
 }
 
 function makeTree(tx, tz) {
@@ -181,6 +180,47 @@ function makeTree(tx, tz) {
     baseZ: top.position.z,
     phase: Math.random() * Math.PI * 2,
   });
+}
+
+function makePalmTree(tx, tz) {
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.12, 0.2, 2.9, 7),
+    new THREE.MeshLambertMaterial({ color: 0x8b5e34 })
+  );
+  trunk.position.set(tx, 1.45, tz);
+  trunk.castShadow = true;
+  scene.add(trunk);
+
+  const top = new THREE.Group();
+  for (let i = 0; i < 5; i++) {
+    const frond = new THREE.Mesh(
+      new THREE.BoxGeometry(0.12, 0.05, 1.6),
+      new THREE.MeshLambertMaterial({ color: 0x2e9f52 })
+    );
+    frond.position.set(0, 0, 0.6);
+    frond.rotation.y = (Math.PI * 2 * i) / 5;
+    frond.rotation.x = -0.55;
+    top.add(frond);
+  }
+  top.position.set(tx, 3.05, tz);
+  scene.add(top);
+  milestoneDecor.palms.push({ trunk, top });
+}
+
+function buildTownCenter() {
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.2, 1.4, 0.3, 12),
+    new THREE.MeshLambertMaterial({ color: 0xccbbaa })
+  );
+  base.position.set(0, 0.15, 0);
+  base.castShadow = true;
+  scene.add(base);
+  worldStar = new THREE.Mesh(
+    new THREE.SphereGeometry(0.35, 8, 8),
+    new THREE.MeshLambertMaterial({ color: 0xffd700 })
+  );
+  worldStar.position.set(0, 0.7, 0);
+  scene.add(worldStar);
 }
 
 function generateTreePoints() {
@@ -317,11 +357,193 @@ function refreshWeather() {
   applyWeather();
 }
 
+function getCurrentMilestones() {
+  if (typeof getMilestoneUnlocks !== 'function' || !activeChildId) return [];
+  return getMilestoneUnlocks(activeChildId);
+}
+
+function hasMilestone(threshold) {
+  return getCurrentMilestones().includes(threshold);
+}
+
+function applyMilestoneWorldState() {
+  const milestones = getCurrentMilestones();
+  if (milestones.includes(100)) addPalmTrees();
+  if (milestones.includes(250)) addFountain();
+  updateBuildingRoofVariants(milestones.includes(500));
+  updateBuildingBanners(milestones.includes(1000));
+}
+
+function refreshWorldMilestones() {
+  if (!scene) return;
+  applyMilestoneWorldState();
+}
+
+function addPalmTrees() {
+  if (milestoneDecor.palms.length) return;
+  PALM_TREE_POSITIONS.forEach(([x, z]) => makePalmTree(x, z));
+}
+
+function addFountain() {
+  if (milestoneDecor.fountain) return;
+  if (worldStar) {
+    scene.remove(worldStar);
+    if (worldStar.geometry) worldStar.geometry.dispose();
+    if (worldStar.material) worldStar.material.dispose();
+    worldStar = null;
+  }
+
+  const group = new THREE.Group();
+  const basin = new THREE.Mesh(
+    new THREE.TorusGeometry(1.1, 0.22, 12, 30),
+    new THREE.MeshLambertMaterial({ color: 0x98a8bb })
+  );
+  basin.rotation.x = Math.PI / 2;
+  basin.position.y = 0.42;
+  group.add(basin);
+
+  const column = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.18, 0.24, 1.3, 10),
+    new THREE.MeshLambertMaterial({ color: 0xd8e1e8 })
+  );
+  column.position.y = 0.92;
+  group.add(column);
+
+  const water = new THREE.Mesh(
+    new THREE.SphereGeometry(0.24, 10, 10),
+    new THREE.MeshLambertMaterial({ color: 0x7fd3ff, emissive: 0x3aa0d8, emissiveIntensity: 0.35 })
+  );
+  water.position.y = 1.78;
+  group.add(water);
+
+  scene.add(group);
+  milestoneDecor.fountain = { group, water };
+}
+
+function updateBuildingRoofVariants(enabled) {
+  buildingMeshes.forEach(building => {
+    const roof = building.userData.roof;
+    if (!roof) return;
+    const baseColor = new THREE.Color(building.userData.subData.color).lerp(new THREE.Color(0xffffff), 0.5);
+    const variant = new THREE.Color(building.userData.subData.color).lerp(new THREE.Color(0xfff1c1), 0.72);
+    roof.material.color.copy(enabled ? variant : baseColor);
+  });
+}
+
+function ensureBanner(building) {
+  if (building.userData.flag) return building.userData.flag;
+  const pole = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.04, 0.04, 1.8, 6),
+    new THREE.MeshLambertMaterial({ color: 0xaaaaaa })
+  );
+  pole.position.set(1.7, 6, 0);
+  building.add(pole);
+  const flag = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.8, 0.5),
+    new THREE.MeshLambertMaterial({ color: 0xffd700, side: THREE.DoubleSide })
+  );
+  flag.position.set(2.1, 6.6, 0);
+  building.add(flag);
+  building.userData.flag = flag;
+  building.userData.flagPole = pole;
+  return flag;
+}
+
+function updateBuildingBanners(enabled) {
+  milestoneDecor.banners = [];
+  buildingMeshes.forEach(building => {
+    if (enabled) {
+      const flag = ensureBanner(building);
+      flag.scale.set(1.15, 1.15, 1.15);
+      flag.material.color.set(0xffd44d);
+      milestoneDecor.banners.push(flag);
+      return;
+    }
+
+    if (building.userData.flag) {
+      building.userData.flag.scale.set(1, 1, 1);
+      building.userData.flag.material.color.set(0xffd700);
+    }
+  });
+}
+
+function triggerWorldCompletionEffect(effect) {
+  if (!scene || !camera || !renderer) return false;
+  const building = buildingMeshes.find(mesh => mesh.userData.subject === effect.subject);
+  if (!building) return false;
+
+  spawnFireworks(building.position.clone(), effect.amount || 10);
+  spawnWorldXPBurst(building.position.clone(), effect.amount || 10);
+  return true;
+}
+
+function spawnFireworks(position, amount) {
+  if (!scene || !activeChildId) return;
+  activeFireworks.forEach(effect => scene.remove(effect.points));
+  activeFireworks = [];
+
+  const particleCount = 36;
+  const geometry = new THREE.BufferGeometry();
+  const positions = new Float32Array(particleCount * 3);
+  const colors = new Float32Array(particleCount * 3);
+  const velocities = [];
+  const palette = [0xffd700, 0xff6b35, 0xff88aa, 0x52b788];
+
+  for (let i = 0; i < particleCount; i++) {
+    positions[i * 3] = position.x;
+    positions[i * 3 + 1] = position.y + 5.1;
+    positions[i * 3 + 2] = position.z;
+
+    const color = new THREE.Color(palette[i % palette.length]);
+    colors[i * 3] = color.r;
+    colors[i * 3 + 1] = color.g;
+    colors[i * 3 + 2] = color.b;
+
+    const angle = (Math.PI * 2 * i) / particleCount;
+    const outward = 0.07 + Math.random() * 0.08;
+    velocities.push({
+      x: Math.cos(angle) * outward,
+      y: 0.08 + Math.random() * 0.06,
+      z: Math.sin(angle) * outward,
+    });
+  }
+
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+  const material = new THREE.PointsMaterial({
+    size: 0.28,
+    vertexColors: true,
+    transparent: true,
+    opacity: 1,
+    depthWrite: false,
+  });
+
+  const points = new THREE.Points(geometry, material);
+  scene.add(points);
+  activeFireworks.push({ points, velocities, life: 1.2 });
+}
+
+function spawnWorldXPBurst(worldPosition, amount) {
+  const host = document.getElementById('world-effects');
+  if (!host || !camera || !renderer) return;
+  const burst = document.createElement('div');
+  burst.className = 'world-xp-burst';
+  burst.textContent = '+' + amount + ' XP';
+  host.appendChild(burst);
+  activeWorldBursts.push({
+    el: burst,
+    position: worldPosition.clone().setY(worldPosition.y + 6),
+    life: 1.2,
+  });
+}
+
 function makeBuilding(name, sub, x, z, progPct) {
   const group = new THREE.Group();
   const col = new THREE.Color(sub.color);
   const lightCol = new THREE.Color(sub.color).lerp(new THREE.Color(0xffffff), 0.5);
   let flag = null;
+  let pole = null;
 
   // Base
   const base = new THREE.Mesh(
@@ -406,7 +628,7 @@ function makeBuilding(name, sub, x, z, progPct) {
 
   // Flag if >25%
   if (progPct >= 25) {
-    const pole = new THREE.Mesh(
+    pole = new THREE.Mesh(
       new THREE.CylinderGeometry(0.04, 0.04, 1.8, 6),
       new THREE.MeshLambertMaterial({ color: 0xaaaaaa })
     );
@@ -421,7 +643,7 @@ function makeBuilding(name, sub, x, z, progPct) {
   }
 
   group.position.set(x, 0, z);
-  group.userData = { subject: name, subData: sub, progress: progPct, beacon, halo, sign, flag, progressFill: pBarFill };
+  group.userData = { subject: name, subData: sub, progress: progPct, beacon, halo, sign, flag, flagPole: progPct >= 25 ? pole : null, progressFill: pBarFill, roof };
   scene.add(group);
   return group;
 }
@@ -681,6 +903,9 @@ function animate() {
   updateDust();
   updateClouds(time);
   updateTrees(time);
+  updateMilestoneAnimations(time);
+  updateFireworks();
+  updateWorldBursts();
 
   // Camera follow
   const carPos = carGroup.position;
@@ -718,7 +943,13 @@ function animate() {
       b.userData.beacon.material.emissiveIntensity = nearBuilding === b ? 1 : 0.65;
     }
     if (b.userData.sign) b.userData.sign.lookAt(camera.position);
-    if (b.userData.flag) b.userData.flag.rotation.y = Math.sin(time * 2 + b.position.x * 0.5) * 0.4;
+    if (b.userData.flag && hasMilestone(1000)) {
+      b.userData.flag.rotation.y = Math.sin(time * 2 + b.position.x * 0.5) * 0.4;
+      b.userData.flag.rotation.z = Math.sin(time * 3 + b.position.z * 0.3) * 0.08;
+    } else if (b.userData.flag) {
+      b.userData.flag.rotation.y = 0;
+      b.userData.flag.rotation.z = 0;
+    }
   }
 
   // Central star spin
@@ -810,6 +1041,74 @@ function updateDust() {
     puff.mesh.material.opacity = Math.max(puff.life * 0.45, 0);
     if (puff.life <= 0) {
       scene.remove(puff.mesh);
+      return false;
+    }
+    return true;
+  });
+}
+
+function updateMilestoneAnimations(time) {
+  milestoneDecor.palms.forEach((palm, index) => {
+    palm.top.rotation.y = Math.sin(time * 0.9 + index) * 0.18;
+    palm.top.rotation.z = Math.sin(time * 1.2 + index * 0.4) * 0.08;
+  });
+
+  if (milestoneDecor.fountain?.water) {
+    milestoneDecor.fountain.water.position.y = 1.78 + Math.sin(time * 3.2) * 0.12;
+    milestoneDecor.fountain.water.scale.y = 0.9 + Math.sin(time * 2.4) * 0.08;
+  }
+}
+
+function updateFireworks() {
+  activeFireworks = activeFireworks.filter(effect => {
+    effect.life -= 0.016;
+    const positions = effect.points.geometry.attributes.position.array;
+
+    for (let i = 0; i < effect.velocities.length; i++) {
+      const velocity = effect.velocities[i];
+      velocity.y -= 0.0026;
+      positions[i * 3] += velocity.x;
+      positions[i * 3 + 1] += velocity.y;
+      positions[i * 3 + 2] += velocity.z;
+    }
+
+    effect.points.geometry.attributes.position.needsUpdate = true;
+    effect.points.material.opacity = Math.max(effect.life / 1.2, 0);
+
+    if (effect.life <= 0) {
+      scene.remove(effect.points);
+      effect.points.geometry.dispose();
+      effect.points.material.dispose();
+      return false;
+    }
+    return true;
+  });
+}
+
+function updateWorldBursts() {
+  if (!camera || !renderer) return;
+  const host = document.getElementById('world-effects');
+  if (!host) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+
+  activeWorldBursts = activeWorldBursts.filter(burst => {
+    burst.life -= 0.016;
+    burst.position.y += 0.03;
+    const projected = burst.position.clone().project(camera);
+    const visible = projected.z < 1;
+
+    if (visible) {
+      const x = (projected.x * 0.5 + 0.5) * rect.width;
+      const y = (-projected.y * 0.5 + 0.5) * rect.height;
+      burst.el.style.left = x + 'px';
+      burst.el.style.top = y + 'px';
+      burst.el.style.display = 'block';
+    } else {
+      burst.el.style.display = 'none';
+    }
+
+    if (burst.life <= 0) {
+      burst.el.remove();
       return false;
     }
     return true;

@@ -20,6 +20,7 @@ if (!STATE.xp) STATE.xp = {};               // { childId: number }
 if (!STATE.portfolio) STATE.portfolio = {};  // { childId: [] }
 if (!STATE.log) STATE.log = {};              // { childId: [] }
 if (!STATE.pin) STATE.pin = '1234';
+if (!STATE.milestones) STATE.milestones = {};
 STATE.children = STATE.children.map((child, index) => ({
   ...child,
   carColor: child.carColor || child.color || CAR_COLOR_OPTIONS[index % CAR_COLOR_OPTIONS.length],
@@ -37,6 +38,7 @@ let pendingParentAction = null;
 let parentPinEntry = '';
 let pendingCarSetupMandatory = false;
 let selectedCarColor = CAR_COLOR_OPTIONS[0];
+let pendingWorldEffects = [];
 
 const PARENT_SCREENS = ['dash', 'portfolio', 'log'];
 
@@ -45,6 +47,44 @@ function getProgress(childId) { return STATE.progress[childId] || {}; }
 function isParentScreen(id) { return PARENT_SCREENS.includes(id); }
 function getCarName(child) { return child?.carName || DEFAULT_CAR_NAME; }
 function getCarColor(child) { return child?.carColor || child?.color || CAR_COLOR_OPTIONS[0]; }
+function getMilestoneUnlocks(childId) {
+  const xp = STATE.xp[childId] || 0;
+  return [100, 250, 500, 1000].filter(threshold => xp >= threshold);
+}
+function syncMilestones(childId) {
+  STATE.milestones[childId] = getMilestoneUnlocks(childId);
+}
+function isWorldVisible() {
+  return !document.getElementById('screen-world').classList.contains('hidden');
+}
+function getSubjectForTopic(grade, topicId) {
+  const subjects = CAPS_CURRICULUM[grade] || {};
+  for (const [subjectName, subjectData] of Object.entries(subjects)) {
+    if ((subjectData.topics || []).some(topic => topic.id === topicId)) return subjectName;
+  }
+  return null;
+}
+function queueWorldCompletionEffect(childId, topicId, amount) {
+  const child = STATE.children.find(entry => entry.id === childId);
+  if (!child || !topicId) return;
+  const subject = getSubjectForTopic(child.grade, topicId);
+  if (!subject) return;
+
+  const effect = { childId, topicId, amount, subject };
+  if (typeof triggerWorldCompletionEffect === 'function' && isWorldVisible() && childId === activeChildId) {
+    const triggered = triggerWorldCompletionEffect(effect);
+    if (triggered) return;
+  }
+
+  pendingWorldEffects.push(effect);
+}
+function flushPendingWorldEffects() {
+  if (typeof triggerWorldCompletionEffect !== 'function' || !isWorldVisible()) return;
+  pendingWorldEffects = pendingWorldEffects.filter(effect => {
+    if (effect.childId !== activeChildId) return true;
+    return !triggerWorldCompletionEffect(effect);
+  });
+}
 function getLocalDateParts(date = new Date()) {
   return {
     year: date.getFullYear(),
@@ -109,9 +149,12 @@ function setTopicState(childId, topicId, val) {
 
 function awardXP(childId, amt, topicId) {
   STATE.xp[childId] = (STATE.xp[childId]||0) + amt;
+  syncMilestones(childId);
   saveState(STATE);
   showXPToast(amt);
   updateBuildingProgress();
+  queueWorldCompletionEffect(childId, topicId, amt);
+  if (typeof refreshWorldMilestones === 'function') refreshWorldMilestones();
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -176,6 +219,7 @@ function addChild() {
 function enterWorld() {
   if (!activeChildId) return;
   const ch = getChild();
+  syncMilestones(ch.id);
   document.getElementById('hud-child-name').textContent = ch.name + '\'s World';
   document.getElementById('hud-child-grade').textContent = 'Grade ' + ch.grade + ' · CAPS';
   document.getElementById('hud-car-name').textContent = 'Car: ' + getCarName(ch);
@@ -189,6 +233,7 @@ function enterWorld() {
   }
   showScreen('world');
   if (typeof refreshWeather === 'function') refreshWeather();
+  flushPendingWorldEffects();
   maybeOpenCarSetup();
 }
 
