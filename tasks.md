@@ -47,7 +47,7 @@ Goal from source: produce a rock-solid offline PWA with no CDN dependencies, PIN
 | ID | Task | Status | Repo-aware note |
 | --- | --- | --- | --- |
 | T1.1 | Bundle Three.js locally and remove CDN dependency | `Done` | Completed via [lib/three.min.js](/C:/Users/User/LMS/lib/three.min.js), [index.html](/C:/Users/User/LMS/index.html), and [sw.js](/C:/Users/User/LMS/sw.js). The app no longer depends on the CDN for Three.js boot. |
-| T1.2 | Child mode vs parent mode PIN separation inside the main app world flow | `Partial` | Parent PIN exists in [parent-dashboard/index.html](/C:/Users/User/LMS/parent-dashboard/index.html), but the lock-in-world HUD flow described in the task has not been built in the main app. |
+| T1.2 | Child mode vs parent mode PIN separation inside the main app world flow | `Partial` | The main app now has a world HUD lock button, PIN modal, and gated parent screens in [index.html](/C:/Users/User/LMS/index.html) and [js/app.js](/C:/Users/User/LMS/js/app.js). It remains partial because the app still starts on learner selection rather than dropping directly into the child world by default. |
 | T1.3 | Car colour and car name customisation per child | `Todo` | No persistent car customisation flow or per-child car setup state is present in [js/app.js](/C:/Users/User/LMS/js/app.js) or [js/world.js](/C:/Users/User/LMS/js/world.js). |
 | T1.4 | Weather system tied to study streak | `Todo` | The world has atmosphere and clouds, but there is no streak-driven weather calculation tied to log history. |
 | T1.5 | XP completion fireworks in the 3D world | `Todo` | XP updates exist, but there is no world-space fireworks or queued effect system tied to topic completion. |

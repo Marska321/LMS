@@ -510,12 +510,23 @@ function bindInput() {
   if (worldInputBound) return;
   worldInputBound = true;
   document.addEventListener('keydown', e => {
+    if (typeof isParentPinOpen === 'function' && isParentPinOpen()) {
+      e.preventDefault();
+      return;
+    }
     keys[e.code] = true;
     if (e.code === 'Space' || e.code === 'Enter') {
       e.preventDefault();
       enterSubjectFromWorld();
     }
-    if (e.code === 'Tab') { e.preventDefault(); showScreen('dash'); }
+    if (e.code === 'Tab') {
+      e.preventDefault();
+      if (typeof promptParentAccess === 'function') {
+        promptParentAccess({ type: 'screen', id: 'dash' });
+      } else {
+        showScreen('dash');
+      }
+    }
     if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
   });
   document.addEventListener('keyup', e => { keys[e.code] = false; });

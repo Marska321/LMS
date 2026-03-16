@@ -44,8 +44,9 @@
       <div class="hud-card hud-controls">
         <div>Arrow keys / WASD to drive</div>
         <div>Space / Enter to go inside</div>
-        <div style="margin-top:4px;opacity:.5">📊 Tab → Dashboard</div>
+        <div style="margin-top:4px;opacity:.5">🔒 Tab → Parent mode</div>
       </div>
+      <button class="hud-lock-btn" onclick="openParentDashboard()">🔒 Parent</button>
     </div>
 
     <!-- Approach prompt -->
@@ -96,7 +97,7 @@
   <div class="lms-topbar">
     <button class="back-btn" onclick="goToWorld()">← World</button>
     <div class="lms-subject-title">Overview</div>
-    <button class="back-btn" onclick="showModal('settings')">⚙️</button>
+    <button class="back-btn" onclick="lockParentMode()">🔒 Exit</button>
   </div>
   <div id="dash-body" style="overflow-y:auto;flex:1;padding:16px"></div>
 </div>
@@ -153,6 +154,36 @@
     <div class="modal-handle"></div>
     <div class="modal-title">Settings</div>
     <div id="settings-body"></div>
+  </div>
+</div>
+
+<!-- Parent PIN modal -->
+<div class="modal-overlay hidden" id="modal-parent-pin" onclick="closeModalOutside(event,'parent-pin')">
+  <div class="modal-sheet pin-sheet" id="parent-pin-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Parent PIN</div>
+    <div class="pin-subtitle">Enter your 4-digit PIN to open parent mode.</div>
+    <div class="pin-dots" id="parent-pin-dots">
+      <div class="pin-dot" id="parent-pin-dot-0"></div>
+      <div class="pin-dot" id="parent-pin-dot-1"></div>
+      <div class="pin-dot" id="parent-pin-dot-2"></div>
+      <div class="pin-dot" id="parent-pin-dot-3"></div>
+    </div>
+    <div class="pin-pad">
+      <button class="pin-key" onclick="parentPinPress(1)">1</button>
+      <button class="pin-key" onclick="parentPinPress(2)">2</button>
+      <button class="pin-key" onclick="parentPinPress(3)">3</button>
+      <button class="pin-key" onclick="parentPinPress(4)">4</button>
+      <button class="pin-key" onclick="parentPinPress(5)">5</button>
+      <button class="pin-key" onclick="parentPinPress(6)">6</button>
+      <button class="pin-key" onclick="parentPinPress(7)">7</button>
+      <button class="pin-key" onclick="parentPinPress(8)">8</button>
+      <button class="pin-key" onclick="parentPinPress(9)">9</button>
+      <button class="pin-key" onclick="parentPinClear()" style="font-size:13px">⌫</button>
+      <button class="pin-key" onclick="parentPinPress(0)">0</button>
+      <button class="pin-key pin-key-submit" onclick="parentPinSubmit()">→</button>
+    </div>
+    <div class="pin-hint" id="parent-pin-hint">Default PIN: 1234 - change it in Settings.</div>
   </div>
 </div>
 

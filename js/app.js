@@ -17,14 +17,23 @@ if (!STATE.progress) STATE.progress = {};    // { childId: { topicId: 0|1|2 } }
 if (!STATE.xp) STATE.xp = {};               // { childId: number }
 if (!STATE.portfolio) STATE.portfolio = {};  // { childId: [] }
 if (!STATE.log) STATE.log = {};              // { childId: [] }
+if (!STATE.pin) STATE.pin = '1234';
 
 let activeChildId = null;
 let activeSubject = null;
 let worldReady = false;
 let worldFallbackShown = false;
+let currentScreen = 'intro';
+let parentModeUnlocked = false;
+let pendingParentAction = null;
+let parentPinEntry = '';
+
+const PARENT_SCREENS = ['dash', 'portfolio', 'log'];
 
 function getChild() { return STATE.children.find(c => c.id === activeChildId); }
 function getProgress(childId) { return STATE.progress[childId] || {}; }
+function isParentScreen(id) { return PARENT_SCREENS.includes(id); }
+
 function setTopicState(childId, topicId, val) {
   if (!STATE.progress[childId]) STATE.progress[childId] = {};
   const old = STATE.progress[childId][topicId] || 0;
@@ -109,6 +118,10 @@ function enterWorld() {
 
 function goToWorld() {
   if (!activeChildId) return;
+  if (isParentScreen(currentScreen) && parentModeUnlocked) {
+    lockParentMode();
+    return;
+  }
   if (!worldReady) {
     enterWorld();
     return;
@@ -119,13 +132,17 @@ function goToWorld() {
 }
 
 function showWorldFallback() {
-  showScreen('dash');
+  showScreen('dash', { bypassParentGate: true });
   if (worldFallbackShown) return;
   worldFallbackShown = true;
   alert('The 3D learning world is unavailable on this device right now.\n\nOpening the dashboard instead so you can keep working.');
 }
 
 function openParentDashboard() {
+  promptParentAccess({ type: 'screen', id: 'dash' });
+}
+
+function openStandaloneParentDashboard() {
   window.open('./parent-dashboard/index.html', '_blank');
 }
 
@@ -133,10 +150,15 @@ function openParentDashboard() {
    SCREEN MANAGER
 ════════════════════════════════════════════════════════ */
 const LMS_SCREENS = ['lms','dash','portfolio','log'];
-function showScreen(id) {
+function showScreen(id, options = {}) {
+  if (isParentScreen(id) && !parentModeUnlocked && !options.bypassParentGate) {
+    promptParentAccess({ type: 'screen', id });
+    return;
+  }
   document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
   const el = document.getElementById('screen-' + id);
   if (el) { el.classList.remove('hidden'); el.classList.add('pop-in'); }
+  currentScreen = id;
   const nav = document.getElementById('bottom-nav');
   if (['lms','dash','portfolio','log'].includes(id)) {
     nav.style.display = 'flex';
@@ -345,7 +367,7 @@ function renderDashboard() {
   <div class="card">
     <div class="card-title">Quick Actions</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <button onclick="showScreen('world')" style="padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--green-bg);color:var(--green);font-family:sans-serif;font-size:13px;font-weight:700;cursor:pointer">🌍 Back to World</button>
+      <button onclick="goToWorld()" style="padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--green-bg);color:var(--green);font-family:sans-serif;font-size:13px;font-weight:700;cursor:pointer">🌍 Back to World</button>
       <button onclick="showScreen('portfolio')" style="padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--purple-bg);color:var(--purple);font-family:sans-serif;font-size:13px;font-weight:700;cursor:pointer">📁 Portfolio</button>
       <button onclick="logToday()" style="padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--blue-bg);color:var(--blue);font-family:sans-serif;font-size:13px;font-weight:700;cursor:pointer">📅 Log Today</button>
       <button onclick="showModal('settings')" style="padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-family:sans-serif;font-size:13px;font-weight:700;cursor:pointer">⚙️ Settings</button>
@@ -526,7 +548,11 @@ function spawnXPFloat(el) {
 /* ═══════════════════════════════════════════════════════
    SETTINGS MODAL
 ════════════════════════════════════════════════════════ */
-function showModal(id) {
+function showModal(id, options = {}) {
+  if (id === 'settings' && !parentModeUnlocked && !options.bypassParentGate) {
+    promptParentAccess({ type: 'modal', id });
+    return;
+  }
   if (id === 'settings') renderSettings();
   document.getElementById('modal-' + id).classList.remove('hidden');
 }
@@ -534,7 +560,118 @@ function closeModal(id) {
   document.getElementById('modal-' + id).classList.add('hidden');
 }
 function closeModalOutside(e, id) {
-  if (e.target === document.getElementById('modal-' + id)) closeModal(id);
+  if (e.target !== document.getElementById('modal-' + id)) return;
+  closeModal(id);
+  if (id === 'parent-pin') {
+    resetParentPin();
+    pendingParentAction = null;
+  }
+}
+
+function promptParentAccess(action) {
+  pendingParentAction = action || { type: 'screen', id: 'dash' };
+  resetParentPin();
+  closeModal('settings');
+  document.getElementById('modal-parent-pin').classList.remove('hidden');
+}
+
+function runParentAction(action) {
+  if (!action) return;
+  if (action.type === 'modal') {
+    showModal(action.id, { bypassParentGate: true });
+    return;
+  }
+  if (action.type === 'screen') {
+    showScreen(action.id, { bypassParentGate: true });
+  }
+}
+
+function resetParentPinHint() {
+  const hint = document.getElementById('parent-pin-hint');
+  hint.textContent = 'Default PIN: 1234 - change it in Settings.';
+  hint.classList.remove('error');
+}
+
+function updateParentPinDots() {
+  for (let i = 0; i < 4; i++) {
+    document.getElementById('parent-pin-dot-' + i).classList.toggle('filled', i < parentPinEntry.length);
+  }
+}
+
+function resetParentPin() {
+  parentPinEntry = '';
+  updateParentPinDots();
+  resetParentPinHint();
+  const sheet = document.getElementById('parent-pin-sheet');
+  sheet.classList.remove('shake');
+}
+
+function isParentPinOpen() {
+  return !document.getElementById('modal-parent-pin').classList.contains('hidden');
+}
+
+function parentPinPress(n) {
+  if (parentPinEntry.length >= 4) return;
+  resetParentPinHint();
+  parentPinEntry += String(n);
+  updateParentPinDots();
+  if (parentPinEntry.length === 4) setTimeout(parentPinSubmit, 120);
+}
+
+function parentPinClear() {
+  if (!parentPinEntry.length) return;
+  resetParentPinHint();
+  parentPinEntry = parentPinEntry.slice(0, -1);
+  updateParentPinDots();
+}
+
+function parentPinSubmit() {
+  if (String(parentPinEntry) === String(STATE.pin)) {
+    parentModeUnlocked = true;
+    closeModal('parent-pin');
+    const action = pendingParentAction;
+    pendingParentAction = null;
+    resetParentPin();
+    runParentAction(action || { type: 'screen', id: 'dash' });
+    return;
+  }
+
+  parentPinEntry = '';
+  updateParentPinDots();
+  const hint = document.getElementById('parent-pin-hint');
+  hint.textContent = 'Incorrect PIN - try again.';
+  hint.classList.add('error');
+  const sheet = document.getElementById('parent-pin-sheet');
+  sheet.classList.remove('shake');
+  void sheet.offsetWidth;
+  sheet.classList.add('shake');
+}
+
+function lockParentMode() {
+  parentModeUnlocked = false;
+  pendingParentAction = null;
+  resetParentPin();
+  closeModal('settings');
+  if (worldReady) {
+    updateHUD();
+    showScreen('world', { bypassParentGate: true });
+    if (typeof onResize === 'function') onResize();
+  } else {
+    showScreen('intro', { bypassParentGate: true });
+  }
+}
+
+function changeParentPin() {
+  const nextPin = prompt('Enter a new 4-digit parent PIN:', String(STATE.pin || '1234'));
+  if (!nextPin) return;
+  if (!/^\d{4}$/.test(nextPin)) {
+    alert('PIN must be exactly 4 digits.');
+    return;
+  }
+  STATE.pin = nextPin;
+  saveState(STATE);
+  alert('Parent PIN updated.');
+  renderSettings();
 }
 
 function renderSettings() {
@@ -560,6 +697,11 @@ function renderSettings() {
       <div class="settings-label">Offline mode</div>
       <div class="settings-value">✅ Ready</div>
     </div>
+    <div class="settings-row" onclick="changeParentPin()" style="cursor:pointer">
+      <div class="settings-icon">🔢</div>
+      <div class="settings-label">Change parent PIN</div>
+      <div class="settings-value">${STATE.pin ? '••••' : '1234'} →</div>
+    </div>
     <div class="settings-row" onclick="backupData()" style="cursor:pointer">
       <div class="settings-icon">💾</div>
       <div class="settings-label">Export backup</div>
@@ -575,10 +717,15 @@ function renderSettings() {
       <div class="settings-label">Export portfolio PDF</div>
       <div class="settings-value">For inspection →</div>
     </div>
-    <div class="settings-row" onclick="openParentDashboard()" style="cursor:pointer">
+    <div class="settings-row" onclick="lockParentMode()" style="cursor:pointer">
       <div class="settings-icon">🧑</div>
-      <div class="settings-label">Open parent dashboard</div>
-      <div class="settings-value">PIN protected →</div>
+      <div class="settings-label">Exit parent mode</div>
+      <div class="settings-value">Back to world →</div>
+    </div>
+    <div class="settings-row" onclick="openStandaloneParentDashboard()" style="cursor:pointer">
+      <div class="settings-icon">🪟</div>
+      <div class="settings-label">Open standalone parent dashboard</div>
+      <div class="settings-value">Separate page →</div>
     </div>
     <div class="settings-row" onclick="if(confirm('Reset ALL progress? This cannot be undone.'))resetProgress();" style="cursor:pointer">
       <div class="settings-icon">🗑️</div>
@@ -641,6 +788,35 @@ function resetProgress() {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js?v=3', { updateViaCache: 'none' }).catch(() => {});
 }
+
+document.addEventListener('keydown', e => {
+  if (!isParentPinOpen()) return;
+  if (/^\d$/.test(e.key)) {
+    e.preventDefault();
+    e.stopPropagation();
+    parentPinPress(e.key);
+    return;
+  }
+  if (e.key === 'Backspace') {
+    e.preventDefault();
+    e.stopPropagation();
+    parentPinClear();
+    return;
+  }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    e.stopPropagation();
+    parentPinSubmit();
+    return;
+  }
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    e.stopPropagation();
+    closeModal('parent-pin');
+    resetParentPin();
+    pendingParentAction = null;
+  }
+}, true);
 
 /* ═══════════════════════════════════════════════════════
    BOOT
