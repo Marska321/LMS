@@ -1,12 +1,12 @@
-const CACHE = 'homeschool-lms-v6';
+const CACHE = 'homeschool-lms-v7';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json?v=4',
   './parent-dashboard/index.html',
   './css/app.css?v=3',
-  './js/app.js?v=4',
-  './js/world.js?v=4',
+  './js/app.js?v=5',
+  './js/world.js?v=5',
   './data/curriculum.js?v=3',
   './lib/three.min.js',
   './lib/GLTFLoader.js',

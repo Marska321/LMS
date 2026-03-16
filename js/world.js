@@ -1062,6 +1062,7 @@ function buildCar() {
   const carAsset = carAssetPath ? instantiateGLB(carAssetPath, { width: 1.8, depth: 3.2, height: 1.8 }) : null;
 
   if (carAsset) {
+    console.info('HomeSchool Hub world: using GLB car model', carAssetPath);
     carAsset.traverse(obj => {
       if (!obj.isMesh) return;
       const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
@@ -1076,6 +1077,8 @@ function buildCar() {
     scene.add(carGroup);
     return;
   }
+
+  console.warn('HomeSchool Hub world: falling back to procedural car');
 
   // Body
   carBodyMesh = new THREE.Mesh(
