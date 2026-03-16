@@ -251,7 +251,7 @@ function instantiateGLB(path, footprint, rotationY = 0) {
 }
 
 function createSceneLights() {
-  sunLight = new THREE.DirectionalLight(0xfff8e8, 1.5);
+  sunLight = new THREE.DirectionalLight(0xfff8e8, 2.35);
   sunLight.position.set(25, 35, 20);
   sunLight.castShadow = true;
   sunLight.shadow.mapSize.set(2048, 2048);
@@ -260,10 +260,10 @@ function createSceneLights() {
   sunLight.shadow.camera.far = 130;
   scene.add(sunLight);
 
-  ambientLight = new THREE.AmbientLight(0xc8d8ff, 0.75);
+  ambientLight = new THREE.AmbientLight(0xc8d8ff, 1.95);
   scene.add(ambientLight);
 
-  fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+  fillLight = new THREE.DirectionalLight(0xffffff, 0.55);
   fillLight.position.set(-10, 5, -10);
   scene.add(fillLight);
 }
@@ -464,19 +464,7 @@ function makePalmTree(tx, tz) {
 }
 
 function buildTownCenter() {
-  const base = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.2, 1.4, 0.3, 12),
-    new THREE.MeshLambertMaterial({ color: 0xccbbaa })
-  );
-  base.position.set(0, 0.15, 0);
-  base.castShadow = true;
-  scene.add(base);
-  worldStar = new THREE.Mesh(
-    new THREE.SphereGeometry(0.35, 8, 8),
-    new THREE.MeshLambertMaterial({ color: 0xffd700 })
-  );
-  worldStar.position.set(0, 0.7, 0);
-  scene.add(worldStar);
+  worldStar = null;
 }
 
 function generateTreePoints() {
@@ -519,11 +507,11 @@ function jitterFor(x, z, axis) {
 
 function makeClouds() {
   const cloudAnchors = [
-    [-16, 10, -8], [-4, 12, 4], [8, 9, -2], [18, 11, 8], [2, 13, 16]
+    [-34, 24, -28], [-18, 22, 34], [22, 25, -34], [36, 23, 18], [0, 26, 42]
   ];
   cloudAnchors.forEach(([x, y, z], idx) => {
     const group = new THREE.Group();
-    const puffGeo = new THREE.SphereGeometry(2.6, 12, 12);
+    const puffGeo = new THREE.SphereGeometry(1.0, 10, 10);
     [[0, 0, 0], [1.6, 0.2, 0.4], [-1.6, 0.1, 0.2], [0.4, 0.5, -0.6]].forEach(([px, py, pz], i) => {
       const puff = new THREE.Mesh(
         puffGeo,
@@ -533,8 +521,8 @@ function makeClouds() {
           opacity: 0.9,
         })
       );
-      puff.scale.setScalar(i === 0 ? 1.15 : 0.95 + Math.random() * 0.25);
-      puff.position.set(px * 1.5, py * 1.3, pz * 1.3);
+      puff.scale.setScalar(i === 0 ? 0.52 : 0.4 + Math.random() * 0.12);
+      puff.position.set(px * 0.75, py * 0.6, pz * 0.75);
       group.add(puff);
     });
     group.position.set(x, y, z);
@@ -561,36 +549,36 @@ function applyWeather() {
       sky: 0x87ceeb,
       fogNear: 35,
       fogFar: 90,
-      sun: 1.5,
-      ambient: 0.75,
-      fill: 0.3,
+      sun: 2.35,
+      ambient: 1.95,
+      fill: 0.55,
       cloudOpacity: 0.78,
     },
     'partly-cloudy': {
       sky: 0xa8c4d4,
       fogNear: 30,
       fogFar: 70,
-      sun: 1.2,
-      ambient: 0.68,
-      fill: 0.24,
+      sun: 1.95,
+      ambient: 1.62,
+      fill: 0.42,
       cloudOpacity: 0.86,
     },
     overcast: {
       sky: 0x8899aa,
       fogNear: 24,
       fogFar: 55,
-      sun: 0.9,
-      ambient: 0.58,
-      fill: 0.2,
+      sun: 1.55,
+      ambient: 1.34,
+      fill: 0.34,
       cloudOpacity: 0.92,
     },
     rainy: {
       sky: 0x667788,
       fogNear: 20,
       fogFar: 45,
-      sun: 0.6,
-      ambient: 0.48,
-      fill: 0.14,
+      sun: 1.15,
+      ambient: 1.08,
+      fill: 0.24,
       cloudOpacity: 0.98,
     },
   };
