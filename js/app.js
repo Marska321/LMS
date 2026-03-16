@@ -39,10 +39,18 @@ let parentPinEntry = '';
 let pendingCarSetupMandatory = false;
 let selectedCarColor = CAR_COLOR_OPTIONS[0];
 let pendingWorldEffects = [];
+let deferredInstallPrompt = null;
+let installPromptAvailable = false;
 
 const PARENT_SCREENS = ['dash', 'portfolio', 'log'];
 
 function getChild() { return STATE.children.find(c => c.id === activeChildId); }
+function getPreferredChildId() {
+  if (STATE.lastActiveChildId && STATE.children.some(child => child.id === STATE.lastActiveChildId)) {
+    return STATE.lastActiveChildId;
+  }
+  return STATE.children[0]?.id || null;
+}
 function getProgress(childId) { return STATE.progress[childId] || {}; }
 function isParentScreen(id) { return PARENT_SCREENS.includes(id); }
 function getCarName(child) { return child?.carName || DEFAULT_CAR_NAME; }
@@ -53,6 +61,18 @@ function getMilestoneUnlocks(childId) {
 }
 function syncMilestones(childId) {
   STATE.milestones[childId] = getMilestoneUnlocks(childId);
+}
+function isIosDevice() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+function isStandaloneMode() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+function getInstallState() {
+  if (isStandaloneMode()) return 'installed';
+  if (installPromptAvailable) return 'prompt';
+  if (isIosDevice()) return 'ios';
+  return 'unavailable';
 }
 function isWorldVisible() {
   return !document.getElementById('screen-world').classList.contains('hidden');
@@ -186,6 +206,8 @@ function renderIntro() {
 
 function selectChild(id) {
   activeChildId = id;
+  STATE.lastActiveChildId = id;
+  saveState(STATE);
   document.querySelectorAll('.child-card').forEach(el => el.classList.remove('selected'));
   const el = document.getElementById('cc-' + id);
   if (el) el.classList.add('selected');
@@ -230,9 +252,12 @@ function enterWorld() {
       showWorldFallback();
       return;
     }
+  } else if (typeof resetWorldForActiveChild === 'function') {
+    resetWorldForActiveChild();
   }
   showScreen('world');
   if (typeof refreshWeather === 'function') refreshWeather();
+  if (typeof refreshWorldMilestones === 'function') refreshWorldMilestones();
   flushPendingWorldEffects();
   maybeOpenCarSetup();
 }
@@ -898,6 +923,18 @@ function changeParentPin() {
 
 function renderSettings() {
   const ch = getChild() || {};
+  const installState = getInstallState();
+  const installRow = installState === 'installed'
+    ? `<div class="settings-row">
+      <div class="settings-icon">📲</div>
+      <div class="settings-label">Install as app</div>
+      <div class="settings-value">Already installed ✓</div>
+    </div>`
+    : `<div class="settings-row" onclick="installApp()" style="cursor:pointer">
+      <div class="settings-icon">📲</div>
+      <div class="settings-label">Install as app</div>
+      <div class="settings-value">${installState === 'prompt' ? 'Install now →' : installState === 'ios' ? 'iPhone/iPad steps →' : 'Use browser install menu →'}</div>
+    </div>`;
   document.getElementById('settings-body').innerHTML = `
     <div class="settings-row">
       <div class="settings-icon">👤</div>
@@ -919,6 +956,7 @@ function renderSettings() {
       <div class="settings-label">Offline mode</div>
       <div class="settings-value">✅ Ready</div>
     </div>
+    ${installRow}
     <div class="settings-row" onclick="openCarSetupFromSettings()" style="cursor:pointer">
       <div class="settings-icon">🚗</div>
       <div class="settings-label">Car customisation</div>
@@ -964,6 +1002,34 @@ function renderSettings() {
       All data stays on this device. No accounts, no cloud, no ads.<br>
       Built for homeschool families. POPIA compliant.
     </div>`;
+}
+
+async function installApp() {
+  const installState = getInstallState();
+
+  if (installState === 'installed') {
+    alert('HomeSchool Hub is already installed on this device.');
+    return;
+  }
+
+  if (installState === 'prompt' && deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    const result = await deferredInstallPrompt.userChoice.catch(() => null);
+    deferredInstallPrompt = null;
+    installPromptAvailable = false;
+    renderSettings();
+    if (result?.outcome === 'accepted') {
+      alert('HomeSchool Hub is being installed. Look for it on your home screen or in your app list.');
+    }
+    return;
+  }
+
+  if (installState === 'ios') {
+    alert('To install on iPhone or iPad:\n\n1. Open this app in Safari\n2. Tap the Share button\n3. Choose "Add to Home Screen"\n4. Confirm the HomeSchool Hub icon\n\nAfter that it will launch like an app and work offline.');
+    return;
+  }
+
+  alert('Use your browser install icon or browser menu to install HomeSchool Hub as an app on this device.');
 }
 
 function backupData() {
@@ -1013,8 +1079,19 @@ function resetProgress() {
    SERVICE WORKER REGISTRATION
 ════════════════════════════════════════════════════════ */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js?v=3', { updateViaCache: 'none' }).catch(() => {});
+  navigator.serviceWorker.register('./sw.js?v=4', { updateViaCache: 'none' }).catch(() => {});
 }
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  installPromptAvailable = true;
+});
+
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  installPromptAvailable = false;
+});
 
 document.addEventListener('keydown', e => {
   if (!isParentPinOpen()) return;
@@ -1049,6 +1126,11 @@ document.addEventListener('keydown', e => {
    BOOT
 ════════════════════════════════════════════════════════ */
 renderIntro();
-// Auto-select first child if returning user
-if (STATE.children.length) selectChild(STATE.children[0].id);
+if (STATE.children.length) {
+  const preferredChildId = getPreferredChildId();
+  if (preferredChildId) {
+    selectChild(preferredChildId);
+    requestAnimationFrame(() => enterWorld());
+  }
+}
 

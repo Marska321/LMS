@@ -63,20 +63,7 @@ function initWorld() {
     camPos = new THREE.Vector3(0, 15, 15);
     camLookAt = new THREE.Vector3();
 
-    // Lighting
-    sunLight = new THREE.DirectionalLight(0xfff8e8, 1.5);
-    sunLight.position.set(25, 35, 20);
-    sunLight.castShadow = true;
-    sunLight.shadow.mapSize.set(2048, 2048);
-    sunLight.shadow.camera.left = sunLight.shadow.camera.bottom = -45;
-    sunLight.shadow.camera.right = sunLight.shadow.camera.top = 45;
-    sunLight.shadow.camera.far = 130;
-    scene.add(sunLight);
-    ambientLight = new THREE.AmbientLight(0xc8d8ff, 0.75);
-    scene.add(ambientLight);
-    fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
-    fillLight.position.set(-10, 5, -10);
-    scene.add(fillLight);
+    createSceneLights();
     buildScene();
     buildCar();
     applyWeather();
@@ -97,6 +84,83 @@ function initWorld() {
     camLookAt = null;
     return false;
   }
+}
+
+function createSceneLights() {
+  sunLight = new THREE.DirectionalLight(0xfff8e8, 1.5);
+  sunLight.position.set(25, 35, 20);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.set(2048, 2048);
+  sunLight.shadow.camera.left = sunLight.shadow.camera.bottom = -45;
+  sunLight.shadow.camera.right = sunLight.shadow.camera.top = 45;
+  sunLight.shadow.camera.far = 130;
+  scene.add(sunLight);
+
+  ambientLight = new THREE.AmbientLight(0xc8d8ff, 0.75);
+  scene.add(ambientLight);
+
+  fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+  fillLight.position.set(-10, 5, -10);
+  scene.add(fillLight);
+}
+
+function disposeMaterial(material) {
+  if (!material) return;
+  if (Array.isArray(material)) {
+    material.forEach(disposeMaterial);
+    return;
+  }
+  material.dispose?.();
+}
+
+function disposeSceneNode(node) {
+  if (!node) return;
+  node.traverse(obj => {
+    if (obj.geometry) obj.geometry.dispose();
+    if (obj.material) disposeMaterial(obj.material);
+  });
+}
+
+function clearWorldDomEffects() {
+  activeWorldBursts.forEach(burst => burst.el?.remove());
+  activeWorldBursts = [];
+}
+
+function resetWorldForActiveChild() {
+  if (!renderer || !camera) return false;
+
+  activeFireworks.forEach(effect => {
+    scene?.remove(effect.points);
+    effect.points.geometry?.dispose();
+    effect.points.material?.dispose();
+  });
+  activeFireworks = [];
+  clearWorldDomEffects();
+
+  if (scene) disposeSceneNode(scene);
+
+  scene = new THREE.Scene();
+  carGroup = null;
+  nearBuilding = null;
+  buildingMeshes = [];
+  treeTops = [];
+  cloudGroups = [];
+  dustPuffs = [];
+  worldStar = null;
+  carBodyMesh = null;
+  carCabinMesh = null;
+  milestoneDecor = { palms: [], fountain: null, banners: [] };
+  carVel = 0;
+  carAngle = 0;
+  camPos = new THREE.Vector3(0, 15, 15);
+  camLookAt = new THREE.Vector3();
+
+  createSceneLights();
+  buildScene();
+  buildCar();
+  applyWeather();
+  updateBuildingProgress();
+  return true;
 }
 
 function buildScene() {
