@@ -12,6 +12,7 @@ A gamified, private, offline-first homeschool LMS for South African families usi
 - **Portfolio** — add photos, worksheets, projects; export PDF for inspection
 - **Learning Log** — daily journal entries that build your inspection record
 - **Multi-child** — switch between learners, each with own progress & XP
+- **Parent Dashboard** — separate PIN-protected view for oversight, exports, and admin tasks
 - **Offline-ready PWA** — works with no internet; installs like an app on phone/tablet/desktop
 - **POPIA compliant** — zero data leaves the device; no accounts, no cloud, no ads
 - **Backup/restore** — export a JSON backup, restore from file anytime
@@ -52,6 +53,8 @@ homeschool-lms/
 ├── index.html          ← Main app (entire LMS + 3D world)
 ├── sw.js               ← Service worker (offline caching)
 ├── manifest.json       ← PWA manifest (installability)
+├── parent-dashboard/
+│   └── index.html      ← PIN-protected parent/admin dashboard
 ├── data/
 │   └── curriculum.js   ← Full CAPS topic lists, Grades 4–7
 └── README.md

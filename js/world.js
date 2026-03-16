@@ -13,6 +13,10 @@ let treeTops = [];
 let cloudGroups = [];
 let dustPuffs = [];
 let worldStar = null;
+const CAMERA_FOLLOW_OFFSET = { x: -14, y: 18, z: 14 };
+const CAMERA_TILT_X = -0.72;
+const CAMERA_YAW_Y = -0.78;
+const TREE_GRID_STEPS = [-18, -14, -10, -6, 6, 10, 14, 18];
 const WORLD_SUBJECTS_ORDER = [
   'Mathematics','Natural Sciences','English HL','Social Sciences','Afrikaans FAL','Life Skills'
 ];
@@ -118,12 +122,7 @@ function buildScene() {
   }
 
   // Trees
-  const treePts = [
-    [-6,6],[-8,2.5],[-6,-6],[-8,-2.5],[6,6],[8,2.5],[6,-6],[8,-2.5],
-    [-13,0],[13,0],[0,-13],[0,13],[-10,10],[10,10],[-10,-10],[10,-10],
-    [-16,5],[16,5],[-5,16],[5,-16]
-  ];
-  treePts.forEach(([tx,tz]) => makeTree(tx, tz));
+  generateTreePoints().forEach(([tx, tz]) => makeTree(tx, tz));
   makeClouds();
 
   // Buildings
@@ -178,24 +177,62 @@ function makeTree(tx, tz) {
   });
 }
 
+function generateTreePoints() {
+  const points = [];
+  const buildingBuffers = BUILDING_POSITIONS.map(pos => ({ x: pos.x, z: pos.z, radius: 4.8 }));
+
+  for (const tx of TREE_GRID_STEPS) {
+    for (const tz of TREE_GRID_STEPS) {
+      if (isRoadCorridor(tx, tz)) continue;
+      if (isNearCenter(tx, tz)) continue;
+      if (isInsideBuildingBuffer(tx, tz, buildingBuffers)) continue;
+      points.push([tx + jitterFor(tx, tz, 0), tz + jitterFor(tx, tz, 1)]);
+    }
+  }
+
+  return points;
+}
+
+function isRoadCorridor(x, z) {
+  return Math.abs(x) < 4.6 || Math.abs(z) < 4.6;
+}
+
+function isNearCenter(x, z) {
+  return Math.abs(x) < 7 && Math.abs(z) < 7;
+}
+
+function isInsideBuildingBuffer(x, z, buffers) {
+  return buffers.some(buffer => {
+    const dx = x - buffer.x;
+    const dz = z - buffer.z;
+    return Math.hypot(dx, dz) < buffer.radius;
+  });
+}
+
+function jitterFor(x, z, axis) {
+  const seed = Math.sin((x * 12.9898) + (z * 78.233) + axis * 19.19) * 43758.5453;
+  const normalized = seed - Math.floor(seed);
+  return (normalized - 0.5) * 1.1;
+}
+
 function makeClouds() {
   const cloudAnchors = [
-    [-22, 18, -18], [-8, 20, 10], [10, 17, -8], [24, 19, 16], [0, 22, 24]
+    [-16, 10, -8], [-4, 12, 4], [8, 9, -2], [18, 11, 8], [2, 13, 16]
   ];
   cloudAnchors.forEach(([x, y, z], idx) => {
     const group = new THREE.Group();
-    const puffGeo = new THREE.SphereGeometry(1.8, 10, 10);
+    const puffGeo = new THREE.SphereGeometry(2.6, 12, 12);
     [[0, 0, 0], [1.6, 0.2, 0.4], [-1.6, 0.1, 0.2], [0.4, 0.5, -0.6]].forEach(([px, py, pz], i) => {
       const puff = new THREE.Mesh(
         puffGeo,
         new THREE.MeshLambertMaterial({
           color: 0xffffff,
           transparent: true,
-          opacity: 0.82,
+          opacity: 0.9,
         })
       );
-      puff.scale.setScalar(i === 0 ? 1.15 : 0.9 + Math.random() * 0.2);
-      puff.position.set(px, py, pz);
+      puff.scale.setScalar(i === 0 ? 1.15 : 0.95 + Math.random() * 0.25);
+      puff.position.set(px * 1.5, py * 1.3, pz * 1.3);
       group.add(puff);
     });
     group.position.set(x, y, z);
@@ -556,16 +593,17 @@ function animate() {
 
   // Camera follow
   const carPos = carGroup.position;
-  const behind = new THREE.Vector3(
-    Math.sin(carAngle) * -16,
-    14 + Math.abs(carVel) * 5,
-    Math.cos(carAngle) * -16
+  const followOffset = new THREE.Vector3(
+    CAMERA_FOLLOW_OFFSET.x,
+    CAMERA_FOLLOW_OFFSET.y + Math.abs(carVel) * 2,
+    CAMERA_FOLLOW_OFFSET.z
   );
-  camPos.lerp(carPos.clone().add(behind), 0.055);
+  camPos.lerp(carPos.clone().add(followOffset), 0.055);
   camera.position.set(camPos.x, camPos.y + Math.sin(time * 7) * Math.min(Math.abs(carVel) * 3, 0.18), camPos.z);
-  camLookAt.lerp(carPos.clone().add(new THREE.Vector3(0, 0.5, 0)), 0.08);
-  camera.lookAt(camLookAt);
-  camera.rotation.z = -carVel * 0.08;
+  camera.rotation.order = 'YXZ';
+  camera.rotation.x = CAMERA_TILT_X;
+  camera.rotation.y = CAMERA_YAW_Y;
+  camera.rotation.z = 0;
 
   // Proximity check
   let closest = null, closestDist = 6;

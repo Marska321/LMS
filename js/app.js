@@ -107,11 +107,26 @@ function enterWorld() {
   showScreen('world');
 }
 
+function goToWorld() {
+  if (!activeChildId) return;
+  if (!worldReady) {
+    enterWorld();
+    return;
+  }
+  updateHUD();
+  showScreen('world');
+  if (typeof onResize === 'function') onResize();
+}
+
 function showWorldFallback() {
   showScreen('dash');
   if (worldFallbackShown) return;
   worldFallbackShown = true;
   alert('The 3D learning world is unavailable on this device right now.\n\nOpening the dashboard instead so you can keep working.');
+}
+
+function openParentDashboard() {
+  window.open('./parent-dashboard/index.html', '_blank');
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -560,6 +575,11 @@ function renderSettings() {
       <div class="settings-label">Export portfolio PDF</div>
       <div class="settings-value">For inspection →</div>
     </div>
+    <div class="settings-row" onclick="openParentDashboard()" style="cursor:pointer">
+      <div class="settings-icon">🧑</div>
+      <div class="settings-label">Open parent dashboard</div>
+      <div class="settings-value">PIN protected →</div>
+    </div>
     <div class="settings-row" onclick="if(confirm('Reset ALL progress? This cannot be undone.'))resetProgress();" style="cursor:pointer">
       <div class="settings-icon">🗑️</div>
       <div class="settings-label btn-danger">Reset progress</div>
@@ -619,7 +639,7 @@ function resetProgress() {
    SERVICE WORKER REGISTRATION
 ════════════════════════════════════════════════════════ */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(() => {});
+  navigator.serviceWorker.register('./sw.js?v=3', { updateViaCache: 'none' }).catch(() => {});
 }
 
 /* ═══════════════════════════════════════════════════════

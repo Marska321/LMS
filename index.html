@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#1a1a2e">
 <meta name="description" content="HomeSchool Hub — CAPS Learning World">
 <title>HomeSchool Hub 🌿</title>
-<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/app.css?v=3">
 </head>
 <body>
 
@@ -81,7 +81,7 @@
 ═════════════════════════════════════════════════════ -->
 <div id="screen-lms" class="screen hidden">
   <div class="lms-topbar">
-    <button class="back-btn" onclick="showScreen('world')">← World</button>
+    <button class="back-btn" onclick="goToWorld()">← World</button>
     <div class="lms-subject-icon" id="lms-icon">📐</div>
     <div class="lms-subject-title" id="lms-title">Mathematics</div>
     <button class="back-btn" onclick="showScreen('dash')" style="font-size:12px">📊 Overview</button>
@@ -94,7 +94,7 @@
 ═════════════════════════════════════════════════════ -->
 <div id="screen-dash" class="screen hidden">
   <div class="lms-topbar">
-    <button class="back-btn" onclick="showScreen('world')">← World</button>
+    <button class="back-btn" onclick="goToWorld()">← World</button>
     <div class="lms-subject-title">Overview</div>
     <button class="back-btn" onclick="showModal('settings')">⚙️</button>
   </div>
@@ -127,7 +127,7 @@
 
 <!-- Bottom nav (shown on lms/dash/portfolio/log screens) -->
 <div class="bottom-nav" id="bottom-nav" style="display:none">
-  <button class="nav-btn" id="nav-world" onclick="showScreen('world')">
+  <button class="nav-btn" id="nav-world" onclick="goToWorld()">
     <span class="nav-btn-icon">🌍</span><span>World</span>
   </button>
   <button class="nav-btn active" id="nav-dash" onclick="showScreen('dash')">
@@ -157,9 +157,9 @@
 </div>
 
 <!-- ═══════════ SCRIPTS ═══════════ -->
-<script src="data/curriculum.js"></script>
+<script src="data/curriculum.js?v=3"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="js/app.js"></script>
-<script src="js/world.js"></script>
+<script src="js/app.js?v=3"></script>
+<script src="js/world.js?v=3"></script>
 </body>
 </html>
