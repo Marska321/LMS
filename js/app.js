@@ -12,6 +12,45 @@ const HOME_STYLE_OPTIONS = [
   { id:'modern', label:'Modern' },
   { id:'farmhouse', label:'Farmhouse' },
 ];
+const PLAN_TIERS = {
+  free: {
+    id: 'free',
+    label: 'Free',
+    badge: 'FREE PLAN',
+    maxChildren: 2,
+    portfolioLimit: 10,
+    features: [],
+  },
+  family: {
+    id: 'family',
+    label: 'Family',
+    badge: 'FAMILY PLAN',
+    maxChildren: 4,
+    portfolioLimit: Infinity,
+    features: ['backupRestore', 'reportExport', 'tutorShare', 'homework', 'materials'],
+  },
+  coop: {
+    id: 'coop',
+    label: 'Co-op',
+    badge: 'CO-OP PLAN',
+    maxChildren: 20,
+    portfolioLimit: Infinity,
+    features: ['backupRestore', 'reportExport', 'tutorShare', 'homework', 'materials', 'centreDashboard'],
+  },
+};
+const PLAN_ORDER = ['free', 'family', 'coop'];
+const PLAN_FEATURE_LABELS = {
+  backupRestore: 'backup and restore',
+  reportExport: 'inspection-ready PDF export',
+  tutorShare: 'tutor share links',
+  homework: 'homework assignment',
+  materials: 'materials library',
+  centreDashboard: 'centre dashboard access',
+};
+
+function normalizePlanId(planId) {
+  return PLAN_TIERS[planId] ? planId : 'free';
+}
 
 function loadState() {
   try { return JSON.parse(localStorage.getItem('hs-state')) || {}; } catch{ return {}; }
@@ -31,8 +70,10 @@ if (!STATE.planner) STATE.planner = {};      // { childId: { [weekKey]: { monday
 if (!STATE.homework) STATE.homework = {};    // { childId: HomeworkAssignment[] }
 if (!STATE.dailyChallenge) STATE.dailyChallenge = {}; // { childId: { [date]: { gameId, topicId, completedAt?, bonusXp } } }
 if (!STATE.arcadeOrigins) STATE.arcadeOrigins = [window.location.origin, 'http://127.0.0.1:8080', 'http://localhost:8080'];
+if (!STATE.plan) STATE.plan = 'free';
 if (!STATE.pin) STATE.pin = '1234';
 if (!STATE.milestones) STATE.milestones = {};
+STATE.plan = normalizePlanId(STATE.plan);
 STATE.children = STATE.children.map((child, index) => ({
   ...child,
   carColor: child.carColor || child.color || CAR_COLOR_OPTIONS[index % CAR_COLOR_OPTIONS.length],
@@ -83,6 +124,65 @@ function getCarColor(child) { return child?.carColor || child?.color || CAR_COLO
 function getHomeStyle(child) { return child?.homeStyle || HOME_STYLE_OPTIONS[0].id; }
 function getHomeStyleMeta(styleId) {
   return HOME_STYLE_OPTIONS.find(option => option.id === styleId) || HOME_STYLE_OPTIONS[0];
+}
+function getActivePlanId() {
+  return normalizePlanId(STATE.plan);
+}
+function getActivePlanMeta() {
+  return PLAN_TIERS[getActivePlanId()];
+}
+function getActivePlanLabel() {
+  return getActivePlanMeta().label;
+}
+function hasPlanFeature(feature) {
+  return getActivePlanMeta().features.includes(feature);
+}
+function getPlanChildLimit() {
+  return getActivePlanMeta().maxChildren;
+}
+function getPlanPortfolioLimit() {
+  return getActivePlanMeta().portfolioLimit;
+}
+function requirePlanFeature(feature, message) {
+  if (hasPlanFeature(feature)) return true;
+  const label = PLAN_FEATURE_LABELS[feature] || 'that feature';
+  const tierName = feature === 'centreDashboard' ? 'Co-op' : 'Family';
+  alert(message || `${label.charAt(0).toUpperCase() + label.slice(1)} is available on the ${tierName} plan. Switch plans in Settings to preview it locally.`);
+  return false;
+}
+function requirePlanChildSlot() {
+  const limit = getPlanChildLimit();
+  if (STATE.children.length < limit) return true;
+  alert(`The ${getActivePlanLabel()} plan supports up to ${limit} learner${limit === 1 ? '' : 's'} on this device. Switch plans in Settings to add more.`);
+  return false;
+}
+function requirePortfolioSlot(childId) {
+  const limit = getPlanPortfolioLimit();
+  if (!Number.isFinite(limit)) return true;
+  const current = (STATE.portfolio[childId] || []).length;
+  if (current < limit) return true;
+  alert(`The ${getActivePlanLabel()} plan includes ${limit} saved portfolio item${limit === 1 ? '' : 's'} per learner. Switch plans in Settings for unlimited evidence storage.`);
+  return false;
+}
+function setPlanTier(planId, options = {}) {
+  const { announce = true } = options;
+  const nextPlan = normalizePlanId(planId);
+  if (STATE.plan === nextPlan) return;
+  STATE.plan = nextPlan;
+  saveState(STATE);
+  if (announce) alert(`Plan switched to ${getActivePlanLabel()} for local feature preview.`);
+  if (currentScreen === 'intro') renderIntro();
+  if (currentScreen === 'dash') renderDashboard();
+  if (currentScreen === 'portfolio') renderPortfolio();
+  if (currentScreen === 'log') renderLog();
+  if (currentScreen === 'report') renderInspectionReport();
+  const settingsModal = document.getElementById('modal-settings');
+  if (settingsModal && !settingsModal.classList.contains('hidden')) renderSettings();
+}
+function cyclePlanTier() {
+  const currentIndex = PLAN_ORDER.indexOf(getActivePlanId());
+  const nextPlan = PLAN_ORDER[(currentIndex + 1) % PLAN_ORDER.length];
+  setPlanTier(nextPlan);
 }
 function escapeHtml(value) {
   return String(value || '')
@@ -534,6 +634,7 @@ function chooseHomeworkDueDate(childId, topicId) {
 }
 function promptHomeworkAssignment() {
   if (!parentModeUnlocked) return;
+  if (!requirePlanFeature('homework')) return;
   const ch = getChild();
   if (!ch) return;
   const plannerTopics = PLANNER_DAYS.flatMap(day => getPlannerEntries(ch.id, ch.grade, day.key).map(entry => ({ ...entry, fromPlanner: true })));
@@ -969,6 +1070,7 @@ function selectChild(id) {
 }
 
 function addChild() {
+  if (!requirePlanChildSlot()) return;
   const name = prompt('Child\'s name?');
   if (!name) return;
   const grade = parseInt(prompt('Grade? (1, 2, 3, 4, 5, 6, or 7)'));
@@ -1064,10 +1166,13 @@ function openParentDashboard() {
   promptParentAccess({ type: 'screen', id: 'dash' });
 }
 
-function openStandaloneParentDashboard() {
-  window.open('./parent-dashboard/index.html', '_blank');
+function openStandaloneParentDashboard(page) {
+  const targetUrl = new URL('./parent-dashboard/index.html', window.location.href);
+  if (page) targetUrl.hash = 'page=' + encodeURIComponent(page);
+  window.open(targetUrl.toString(), '_blank');
 }
 function openCenterDashboard() {
+  if (!requirePlanFeature('centreDashboard', 'Centre dashboard access is available on the Co-op plan. Switch plans in Settings to preview it locally.')) return;
   window.open('./parent-dashboard/index.html#centre=1', '_blank');
 }
 
@@ -1328,6 +1433,7 @@ function cycleTopic(topicId, rowEl) {
 }
 function assignTopicHomework(topicId) {
   if (!parentModeUnlocked) return;
+  if (!requirePlanFeature('homework')) return;
   const ch = getChild();
   if (!ch) return;
   const dueDate = chooseHomeworkDueDate(ch.id, topicId);
@@ -1479,6 +1585,7 @@ function renderDashboard() {
 function renderPortfolio() {
   const ch = getChild();
   const items = STATE.portfolio[ch.id] || [];
+  const portfolioLimit = getPlanPortfolioLimit();
 
   const sampleItems = [
     { id:'p1', title:'Fractions worksheet — mixed ops', subject:'Mathematics', type:'Worksheet', icon:'📄', grade:'★★★', date:'14 Mar 2026', color:'#d8f3dc', tagColor:'var(--green)', tagBg:'var(--green-bg)' },
@@ -1494,7 +1601,7 @@ function renderPortfolio() {
       <button onclick="addPortfolioItem()" style="background:var(--green);color:#fff;border:none;padding:8px 14px;border-radius:8px;font-family:sans-serif;font-size:13px;font-weight:700;cursor:pointer">+ Add</button>
     </div>
     <div style="font-family:sans-serif;font-size:13px;color:var(--text2);margin-bottom:16px;background:var(--blue-bg);border-radius:10px;padding:10px 14px;">
-      📋 ${all.length} items · Ready for CAPS inspection export
+      📋 ${all.length} items · Ready for CAPS inspection export${Number.isFinite(portfolioLimit) ? ` · ${items.length}/${portfolioLimit} saved` : ' · Unlimited saved'}
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">`;
 
@@ -1529,11 +1636,12 @@ function renderPortfolio() {
 }
 
 function addPortfolioItem() {
-  const title = prompt('What did ' + getChild().name + ' make or do?');
+  const ch = getChild();
+  if (!requirePortfolioSlot(ch.id)) return;
+  const title = prompt('What did ' + ch.name + ' make or do?');
   if (!title) return;
   const subject = prompt('Which subject? (e.g. Mathematics)') || 'General';
   const type = prompt('Type? (e.g. Worksheet, Drawing, Writing, Project, Test)') || 'Work';
-  const ch = getChild();
   if (!STATE.portfolio[ch.id]) STATE.portfolio[ch.id] = [];
   STATE.portfolio[ch.id].push({
     id: 'p' + Date.now(), title, subject, type,
@@ -1645,6 +1753,7 @@ function buildTutorShareSnapshot(childId = activeChildId) {
 }
 async function openTutorShareLink() {
   if (!parentModeUnlocked) return;
+  if (!requirePlanFeature('tutorShare')) return;
   const snapshot = buildTutorShareSnapshot();
   if (!snapshot) return;
 
@@ -1844,6 +1953,7 @@ function printInspectionReport() {
   setTimeout(() => window.print(), 60);
 }
 function exportPortfolio() {
+  if (!requirePlanFeature('reportExport')) return;
   showScreen('report');
 }
 
@@ -2282,6 +2392,7 @@ function changeParentPin() {
 function renderSettings() {
   const ch = getChild() || {};
   const installState = getInstallState();
+  const planMeta = getActivePlanMeta();
   const installRow = installState === 'installed'
     ? `<div class="settings-row">
       <div class="settings-icon">📲</div>
@@ -2313,6 +2424,16 @@ function renderSettings() {
       <div class="settings-icon">📡</div>
       <div class="settings-label">Offline mode</div>
       <div class="settings-value">✅ Ready</div>
+    </div>
+    <div class="settings-row" onclick="cyclePlanTier()" style="cursor:pointer">
+      <div class="settings-icon">⭐</div>
+      <div class="settings-label">Local plan preview</div>
+      <div class="settings-value">${planMeta.label} →</div>
+    </div>
+    <div class="settings-row" onclick="openStandaloneParentDashboard('upgrade')" style="cursor:pointer">
+      <div class="settings-icon">🧾</div>
+      <div class="settings-label">Plans & pricing</div>
+      <div class="settings-value">${planMeta.badge} →</div>
     </div>
     ${installRow}
     <div class="settings-row" onclick="openCarSetupFromSettings()" style="cursor:pointer">
@@ -2406,6 +2527,7 @@ async function installApp() {
 }
 
 function backupData() {
+  if (!requirePlanFeature('backupRestore')) return;
   const blob = new Blob([JSON.stringify(STATE, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -2416,6 +2538,7 @@ function backupData() {
 }
 
 function importData() {
+  if (!requirePlanFeature('backupRestore')) return;
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = '.json';
@@ -2455,7 +2578,7 @@ function resetProgress() {
    SERVICE WORKER REGISTRATION
 ════════════════════════════════════════════════════════ */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js?v=20', { updateViaCache: 'none' }).catch(() => {});
+  navigator.serviceWorker.register('./sw.js?v=22', { updateViaCache: 'none' }).catch(() => {});
 }
 
 window.addEventListener('beforeinstallprompt', e => {

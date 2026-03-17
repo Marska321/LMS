@@ -105,7 +105,7 @@ Goal from source: introduce payments, plan gating, optional cloud backup, and br
 | ID | Task | Status | Repo-aware note |
 | --- | --- | --- | --- |
 | T6.1 | PayFast payment integration | `Todo` | No PayFast flow, ITN handler, or subscription state exists in the repo. |
-| T6.2 | Feature gates per plan tier | `Partial` | [parent-dashboard/index.html](/C:/Users/User/LMS/parent-dashboard/index.html) contains plan-oriented prototype UI, but there is no enforced gate system across learner actions. |
+| T6.2 | Feature gates per plan tier | `Done` | Implemented in [js/app.js](/C:/Users/User/LMS/js/app.js) and [parent-dashboard/index.html](/C:/Users/User/LMS/parent-dashboard/index.html) with shared local plan state, learner-count limits, portfolio evidence caps, gated homework/tutor-share/report/backup/centre flows, and plan-aware upgrade/settings UI for local preview. |
 | T6.3 | Optional encrypted cloud backup | `Todo` | Backup/restore exists locally only; there is no encrypted cloud backup or worker integration. |
 
 ## Appendix - Recommended Agent Prompts

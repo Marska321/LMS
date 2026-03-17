@@ -1,4 +1,4 @@
-const CACHE = 'homeschool-lms-v21';
+const CACHE = 'homeschool-lms-v23';
 const ASSETS = [
   './',
   './index.html',
@@ -6,13 +6,18 @@ const ASSETS = [
   './parent-dashboard/index.html',
   './arcade/bridge-demo.html',
   './css/app.css?v=4',
-  './js/app.js?v=16',
+  './js/app.js?v=18',
   './js/world.js?v=10',
   './data/curriculum.js?v=6',
   './data/arcade-games.js?v=2',
   './lib/three.min.js',
   './lib/GLTFLoader.js',
   './models/textures/colormap.png',
+  './models/buildings/Textures/colormap.png',
+  './models/car/Textures/colormap.png',
+  './models/details/Textures/colormap.png',
+  './models/nature/Textures/colormap.png',
+  './models/roads/Textures/colormap.png',
   './models/buildings/bldg_afr.glb',
   './models/buildings/bldg_arcade.glb',
   './models/buildings/bldg_english.glb',

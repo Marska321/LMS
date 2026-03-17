@@ -799,6 +799,7 @@ function syncFromLearnerState(target){
   if(learner.progress && typeof learner.progress === 'object') target.progress = JSON.parse(JSON.stringify(learner.progress));
   if(learner.portfolio && typeof learner.portfolio === 'object') target.portfolio = JSON.parse(JSON.stringify(learner.portfolio));
   if(learner.log && typeof learner.log === 'object') target.log = JSON.parse(JSON.stringify(learner.log));
+  if(typeof learner.plan === 'string') target.plan = learner.plan;
 }
 function syncToLearnerState(){
   if(TUTOR_MODE) return;
@@ -807,6 +808,7 @@ function syncToLearnerState(){
   learner.progress = JSON.parse(JSON.stringify(ST.progress||{}));
   learner.portfolio = JSON.parse(JSON.stringify(ST.portfolio||{}));
   learner.log = JSON.parse(JSON.stringify(ST.log||{}));
+  learner.plan = ST.plan || 'free';
   localStorage.setItem('hs-state',JSON.stringify(learner));
 }
 function save(){
@@ -828,6 +830,43 @@ if(!ST.plan)      ST.plan='free';
 
 let activeChild = ST.children[0].id;
 let currentPage = 'dashboard';
+
+const PLAN_META = {
+  free:{label:'Free',badge:'FREE PLAN',maxChildren:2,portfolioLimit:10,features:[]},
+  family:{label:'Family',badge:'FAMILY PLAN',maxChildren:4,portfolioLimit:Infinity,features:['backupRestore','reportExport','materials']},
+  coop:{label:'Co-op',badge:'CO-OP PLAN',maxChildren:20,portfolioLimit:Infinity,features:['backupRestore','reportExport','materials','centreDashboard']},
+};
+const PAGE_HASH = new URLSearchParams(window.location.hash.replace(/^#/,''));
+
+function normalizePlan(plan){ return PLAN_META[plan] ? plan : 'free'; }
+function planMeta(){ return PLAN_META[normalizePlan(ST.plan)]; }
+function planLabel(){ return planMeta().label; }
+function hasPlanFeature(feature){ return planMeta().features.includes(feature); }
+function requirePlanFeature(feature, message){
+  if(hasPlanFeature(feature)) return true;
+  const tierName = feature === 'centreDashboard' ? 'Co-op' : 'Family';
+  alert(message || `This feature is available on the ${tierName} plan. Use Plans & Pricing to switch the local demo plan.`);
+  nav('upgrade');
+  return false;
+}
+function maxChildrenForPlan(){ return planMeta().maxChildren; }
+function portfolioLimitForPlan(){ return planMeta().portfolioLimit; }
+function updatePlanChrome(){
+  if(TUTOR_MODE || CENTER_MODE) return;
+  ST.plan = normalizePlan(ST.plan);
+  const pill=document.querySelector('.plan-pill');
+  if(pill) pill.innerHTML=`<span class="plan-name">${planMeta().badge}</span><span class="plan-upgrade" onclick="nav('upgrade')">Manage →</span>`;
+}
+function setPlan(plan){
+  if(isReadonlyMode()){alert(`${CENTER_MODE ? 'Centre' : 'Tutor'} view is read-only.`); return;}
+  const next = normalizePlan(plan);
+  if(ST.plan === next){ nav('upgrade'); return; }
+  ST.plan = next;
+  save();
+  updatePlanChrome();
+  alert(`Plan switched to ${planLabel()} for local feature preview.`);
+  nav(currentPage);
+}
 
 function child(){ return ST.children.find(c=>c.id===activeChild); }
 function prog(){ return ST.progress[activeChild]||{}; }
@@ -981,13 +1020,13 @@ function pinClear(){
 function pinSubmit(){
   if(TUTOR_MODE){
     document.getElementById('lock-screen').classList.add('gone');
-    renderSidebar(); nav('dashboard');
+    renderSidebar(); nav(currentPage);
     return;
   }
   if(CENTER_MODE){
     if(String(pinEntry)==='2468'){
       document.getElementById('lock-screen').classList.add('gone');
-      renderSidebar(); nav('dashboard');
+      renderSidebar(); nav(currentPage);
     } else {
       pinEntry='';
       [0,1,2,3].forEach(i=>document.getElementById('pd'+i).classList.remove('filled'));
@@ -998,7 +1037,7 @@ function pinSubmit(){
   }
   if(String(pinEntry)===String(ST.pin)){
     document.getElementById('lock-screen').classList.add('gone');
-    renderSidebar(); nav('dashboard');
+    renderSidebar(); nav(currentPage);
   } else {
     pinEntry='';
     [0,1,2,3].forEach(i=>document.getElementById('pd'+i).classList.remove('filled'));
@@ -1061,6 +1100,11 @@ function switchChild(id){
 }
 function addChild(){
   if(isReadonlyMode()){alert(`${CENTER_MODE ? 'Centre' : 'Tutor'} view is read-only.`); return;}
+  if(ST.children.length >= maxChildrenForPlan()){
+    alert(`The ${planLabel()} plan supports up to ${maxChildrenForPlan()} learner${maxChildrenForPlan()===1?'':'s'}. Switch plans in Plans & Pricing to add more.`);
+    nav('upgrade');
+    return;
+  }
   const name=prompt("Child's name?"); if(!name)return;
   const grade=parseInt(prompt("Grade? (1–7)"));
   if(!grade||grade<1||grade>7){alert('Grade must be 1–7');return;}
@@ -1515,9 +1559,16 @@ function renderPortfolio(){
 }
 function addPortItem(){
   if(isReadonlyMode()){alert(`${CENTER_MODE ? 'Centre' : 'Tutor'} view is read-only.`); return;}
+  const limit=portfolioLimitForPlan();
+  const ch=child();
+  const current=(ST.portfolio[ch.id]||[]).length;
+  if(Number.isFinite(limit) && current >= limit){
+    alert(`The ${planLabel()} plan includes ${limit} saved portfolio items per learner. Switch plans in Plans & Pricing for unlimited evidence storage.`);
+    nav('upgrade');
+    return;
+  }
   const title=prompt('What is this evidence of?'); if(!title)return;
   const subject=prompt('Subject?')||'General';
-  const ch=child();
   if(!ST.portfolio[ch.id]) ST.portfolio[ch.id]=[];
   ST.portfolio[ch.id].push({title,subject,type:'Work',icon:'📄',
     color:'#f4f4f5',tc:'var(--ink2)',tb:'var(--surface2)',date:new Date().toLocaleDateString('en-ZA',{day:'numeric',month:'short'})});
@@ -1525,6 +1576,7 @@ function addPortItem(){
 }
 function exportInspection(){
   if(TUTOR_MODE){ window.print(); return; }
+  if(!requirePlanFeature('reportExport','Inspection-ready PDF export is available on the Family plan. Switch the local plan in Plans & Pricing to preview it.')) return;
   alert('📄 Inspection Portfolio Export\n\nThis will print a formatted PDF including:\n• Child profile and current grade\n• Full portfolio with dates and subjects\n• CAPS topic progress per subject\n• Learning log entries\n\nTip: Use File → Print → Save as PDF in your browser.\n\nFull PDF export with CAPS report card format is available on the Family Plan.');
   window.print();
 }
@@ -1578,6 +1630,18 @@ function logToday(){
 
 /* ═══════════ MATERIALS ═══════════ */
 function renderMaterials(){
+  if(!hasPlanFeature('materials')){
+    document.getElementById('main-content').innerHTML=`
+    <div class="fade-in" style="max-width:680px">
+      <div class="upgrade-banner">
+        <div class="ub-plan">${planMeta().badge}</div>
+        <div class="ub-title">Materials Library is locked</div>
+        <div class="ub-sub">The shared materials catalogue opens on the Family plan. Upgrade the local demo plan to preview shelves, kits, and printable resource workflows.</div>
+        <button class="ub-btn" onclick="nav('upgrade')">View Plans</button>
+      </div>
+    </div>`;
+    return;
+  }
   const materials=[
     {type:'MANIPULATIVE',name:'Counters set (100)',sub:'Maths · Number concept',bg:'var(--green-bg)',tc:'var(--green-d)'},
     {type:'MANIPULATIVE',name:'Base 10 Blocks',sub:'Maths · Place value',bg:'var(--green-bg)',tc:'var(--green-d)'},
@@ -1654,6 +1718,10 @@ function renderApps(){
 
 /* ═══════════ UPGRADE / PRICING ═══════════ */
 function renderUpgrade(){
+  const currentPlan = normalizePlan(ST.plan);
+  const tierButton = (plan, featured = false) => currentPlan === plan
+    ? `<button class="tier-btn secondary" disabled>Current Plan</button>`
+    : `<button class="tier-btn ${featured ? 'primary' : 'secondary'}" onclick="setPlan('${plan}')">Switch to ${PLAN_META[plan].label}</button>`;
   document.getElementById('main-content').innerHTML=`
   <div class="fade-in">
     <h2 style="font-family:'DM Serif Display',serif;font-size:26px;margin-bottom:6px">Plans & Pricing</h2>
@@ -1664,7 +1732,7 @@ function renderUpgrade(){
         <div class="tier-name">Free</div>
         <div class="tier-price">R0</div>
         <div class="tier-period">forever</div>
-        ${tierFeature('1 child',true)}
+        ${tierFeature('2 learners',true)}
         ${tierFeature('1 grade (current)',true)}
         ${tierFeature('3D Learning World',true)}
         ${tierFeature('Basic curriculum tracking',true)}
@@ -1675,7 +1743,7 @@ function renderUpgrade(){
         ${tierFeature('Full portfolio + PDF export',false)}
         ${tierFeature('Materials library',false)}
         ${tierFeature('Backup & restore',false)}
-        <button class="tier-btn secondary" disabled>Current Plan</button>
+        ${tierButton('free')}
       </div>
 
       <div class="tier-card featured">
@@ -1694,7 +1762,7 @@ function renderUpgrade(){
         ${tierFeature('Inspection-ready PDF',true)}
         ${tierFeature('Materials library',true)}
         ${tierFeature('Backup & restore',true)}
-        <button class="tier-btn primary" onclick="alert('Launching payment — SA card & EFT · No subscription traps · Cancel anytime')">Upgrade to Family</button>
+        ${tierButton('family',true)}
       </div>
 
       <div class="tier-card">
@@ -1711,8 +1779,17 @@ function renderUpgrade(){
         ${tierFeature('Priority support',true)}
         ${tierFeature('Shared materials library',true)}
         ${tierFeature('Custom EdTech integrations',true)}
-        <button class="tier-btn secondary" onclick="alert('Contact us for co-op setup — we will help you onboard')">Contact Us</button>
+        ${tierButton('coop')}
       </div>
+    </div>
+
+    <div style="margin-bottom:20px;padding:14px 16px;border-radius:14px;background:var(--green-bg);border:1px solid var(--green-mid);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--green-d);margin-bottom:3px">Local plan preview</div>
+        <div style="font-size:14px;font-weight:600;color:var(--ink)">Current plan: ${planMeta().badge}</div>
+        <div style="font-size:12px;color:var(--ink2)">Payments are not wired yet, so these buttons switch the prototype locally for feature-gate testing.</div>
+      </div>
+      <button class="topbar-btn" onclick="updatePlanChrome()">Refresh badge</button>
     </div>
 
     <div style="background:var(--surface2);border-radius:var(--rl);padding:20px;margin-top:8px">
@@ -1746,6 +1823,22 @@ function renderSettings(){
   document.getElementById('main-content').innerHTML=`
   <div class="fade-in" style="max-width:560px">
     <h2 style="font-family:'DM Serif Display',serif;font-size:22px;margin-bottom:20px">Settings</h2>
+
+    <h3 style="font-size:12px;font-weight:700;letter-spacing:.5px;color:var(--ink3);text-transform:uppercase;margin-bottom:8px">Plan</h3>
+    <div class="settings-group" style="margin-bottom:18px">
+      <div class="settings-row" onclick="nav('upgrade')">
+        <div class="sr-icon">⭐</div>
+        <div class="sr-label">Current plan</div>
+        <div class="sr-val">${planMeta().badge}</div>
+        <div class="sr-arrow">→</div>
+      </div>
+      <div class="settings-row" onclick="setPlan('${normalizePlan(ST.plan)==='free' ? 'family' : normalizePlan(ST.plan)==='family' ? 'coop' : 'free'}')">
+        <div class="sr-icon">🧪</div>
+        <div class="sr-label">Cycle local demo plan</div>
+        <div class="sr-val">${planLabel()}</div>
+        <div class="sr-arrow">→</div>
+      </div>
+    </div>
 
     <h3 style="font-size:12px;font-weight:700;letter-spacing:.5px;color:var(--ink3);text-transform:uppercase;margin-bottom:8px">Learners</h3>
     <div class="settings-group" style="margin-bottom:18px">
@@ -1818,7 +1911,7 @@ function renderSettings(){
     <p style="font-size:12px;color:var(--ink3);text-align:center;margin-top:20px;line-height:1.7">
       HomeSchool Hub · South Africa · CAPS Gr 1–7<br>
       POPIA compliant · No accounts · No cloud · No ads<br>
-      <span style="color:var(--green-d)">Free Plan</span> · <span onclick="nav('upgrade')" style="cursor:pointer;text-decoration:underline;color:var(--blue)">Upgrade →</span>
+      <span style="color:var(--green-d)">${planMeta().badge}</span> · <span onclick="nav('upgrade')" style="cursor:pointer;text-decoration:underline;color:var(--blue)">Manage →</span>
     </p>
   </div>`;
 }
@@ -1838,6 +1931,7 @@ function editChild(id){
 }
 function backupData(){
   if(isReadonlyMode()){alert(`${CENTER_MODE ? 'Centre' : 'Tutor'} view is read-only.`); return;}
+  if(!requirePlanFeature('backupRestore','Backup and restore is available on the Family plan. Switch the local plan in Plans & Pricing to preview it.')) return;
   const blob=new Blob([JSON.stringify(ST,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
@@ -1846,6 +1940,7 @@ function backupData(){
 }
 function importData(){
   if(isReadonlyMode()){alert(`${CENTER_MODE ? 'Centre' : 'Tutor'} view is read-only.`); return;}
+  if(!requirePlanFeature('backupRestore','Backup and restore is available on the Family plan. Switch the local plan in Plans & Pricing to preview it.')) return;
   const input=document.createElement('input');
   input.type='file'; input.accept='.json';
   input.onchange=e=>{
@@ -1864,7 +1959,11 @@ function resetAll(){
 /* ═══ BOOT ═══ */
 applyTutorModeChrome();
 applyCenterModeChrome();
+updatePlanChrome();
 renderSidebar();
+if(!TUTOR_MODE && !CENTER_MODE && PAGE_HASH.get('page') && ['dashboard','curriculum','portfolio','log','materials','apps','upgrade','settings'].includes(PAGE_HASH.get('page'))){
+  currentPage = PAGE_HASH.get('page');
+}
 </script>
 </body>
 </html>
