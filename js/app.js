@@ -28,6 +28,7 @@ if (!STATE.portfolio) STATE.portfolio = {};  // { childId: [] }
 if (!STATE.log) STATE.log = {};              // { childId: [] }
 if (!STATE.notes) STATE.notes = {};          // { childId: { topicId: string } }
 if (!STATE.planner) STATE.planner = {};      // { childId: { [weekKey]: { monday: topicId[] ... } } }
+if (!STATE.homework) STATE.homework = {};    // { childId: HomeworkAssignment[] }
 if (!STATE.dailyChallenge) STATE.dailyChallenge = {}; // { childId: { [date]: { gameId, topicId, completedAt?, bonusXp } } }
 if (!STATE.arcadeOrigins) STATE.arcadeOrigins = [window.location.origin, 'http://127.0.0.1:8080', 'http://localhost:8080'];
 if (!STATE.pin) STATE.pin = '1234';
@@ -363,6 +364,240 @@ function removePlannerTopic(childId, weekKey, dayKey, topicId) {
   week[dayKey] = (week[dayKey] || []).filter(entry => entry !== topicId);
   saveState(STATE);
 }
+function getPlannerTopicDueDate(childId, topicId, weekKey = getWeekKey()) {
+  const start = fromISODate(weekKey);
+  if (!start) return null;
+  const week = getPlannerWeek(childId, weekKey);
+  for (let index = 0; index < PLANNER_DAYS.length; index += 1) {
+    const day = PLANNER_DAYS[index];
+    if ((week[day.key] || []).includes(topicId)) {
+      const due = new Date(start);
+      due.setDate(start.getDate() + index);
+      return toLocalISODate(due);
+    }
+  }
+  return null;
+}
+function formatHomeworkDueLabel(dueDate) {
+  if (!dueDate) return 'No due date';
+  const today = toLocalISODate();
+  if (dueDate === today) return 'Due today';
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowKey = toLocalISODate(tomorrow);
+  if (dueDate === tomorrowKey) return 'Due tomorrow';
+  const parsed = fromISODate(dueDate);
+  if (!parsed) return dueDate;
+  return `Due ${parsed.toLocaleDateString('en-ZA', { day:'numeric', month:'short' })}`;
+}
+function getHomeworkAssignments(childId, options = {}) {
+  const child = STATE.children.find(entry => entry.id === childId);
+  if (!child) return [];
+  const includeDone = Boolean(options.includeDone);
+  const today = toLocalISODate();
+  return (STATE.homework[childId] || [])
+    .map(entry => {
+      const topic = getTopicById(child.grade, entry.topicId);
+      const completedAt = entry.completedAt || null;
+      const done = Boolean(completedAt);
+      const dueDate = entry.dueDate || null;
+      const overdue = !done && dueDate && dueDate < today;
+      const dueToday = !done && dueDate === today;
+      return {
+        ...entry,
+        title: topic?.title || entry.title || 'Assigned topic',
+        subject: topic?.subject || entry.subject || 'General',
+        icon: topic?.icon || entry.icon || '📘',
+        color: topic?.color || entry.color || '#2d6a4f',
+        dueDate,
+        dueLabel: formatHomeworkDueLabel(dueDate),
+        done,
+        overdue,
+        dueToday,
+      };
+    })
+    .filter(entry => includeDone || !entry.done)
+    .sort((a, b) => {
+      if (a.done !== b.done) return a.done ? 1 : -1;
+      if (Boolean(a.overdue) !== Boolean(b.overdue)) return a.overdue ? -1 : 1;
+      return String(a.dueDate || '9999-12-31').localeCompare(String(b.dueDate || '9999-12-31')) || a.subject.localeCompare(b.subject) || a.title.localeCompare(b.title);
+    });
+}
+function getHomeworkSummary(childId) {
+  const assignments = getHomeworkAssignments(childId);
+  const overdue = assignments.filter(entry => entry.overdue).length;
+  const dueToday = assignments.filter(entry => entry.dueToday).length;
+  return {
+    assignments,
+    pending: assignments.length,
+    overdue,
+    dueToday,
+    next: assignments[0] || null,
+  };
+}
+function saveHomeworkAssignments(childId, entries) {
+  const next = entries.filter(Boolean);
+  if (next.length) STATE.homework[childId] = next;
+  else delete STATE.homework[childId];
+  saveState(STATE);
+}
+function addHomeworkAssignment(childId, topicId, dueDate, source = 'parent') {
+  const child = STATE.children.find(entry => entry.id === childId);
+  const topic = child ? getTopicById(child.grade, topicId) : null;
+  if (!child || !topic) return false;
+  const assignments = getHomeworkAssignments(childId, { includeDone: true }).map(entry => ({
+    id: entry.id,
+    topicId: entry.topicId,
+    dueDate: entry.dueDate,
+    assignedAt: entry.assignedAt,
+    completedAt: entry.completedAt,
+    source: entry.source,
+    title: entry.title,
+    subject: entry.subject,
+    icon: entry.icon,
+    color: entry.color,
+  }));
+  const existing = assignments.find(entry => entry.topicId === topicId && !entry.completedAt);
+  if (existing) {
+    existing.dueDate = dueDate || existing.dueDate;
+    existing.source = source;
+  } else {
+    assignments.push({
+      id: 'hw-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+      topicId,
+      dueDate,
+      assignedAt: new Date().toISOString(),
+      source,
+      title: topic.title,
+      subject: topic.subject,
+      icon: topic.icon,
+      color: topic.color,
+    });
+  }
+  saveHomeworkAssignments(childId, assignments);
+  return true;
+}
+function completeHomeworkForTopic(childId, topicId) {
+  const assignments = getHomeworkAssignments(childId, { includeDone: true }).map(entry => ({
+    id: entry.id,
+    topicId: entry.topicId,
+    dueDate: entry.dueDate,
+    assignedAt: entry.assignedAt,
+    completedAt: entry.completedAt,
+    source: entry.source,
+    title: entry.title,
+    subject: entry.subject,
+    icon: entry.icon,
+    color: entry.color,
+  }));
+  let changed = false;
+  assignments.forEach(entry => {
+    if (entry.topicId === topicId && !entry.completedAt) {
+      entry.completedAt = new Date().toISOString();
+      changed = true;
+    }
+  });
+  if (changed) saveHomeworkAssignments(childId, assignments);
+  return changed;
+}
+function removeHomeworkAssignment(childId, assignmentId) {
+  const assignments = getHomeworkAssignments(childId, { includeDone: true }).map(entry => ({
+    id: entry.id,
+    topicId: entry.topicId,
+    dueDate: entry.dueDate,
+    assignedAt: entry.assignedAt,
+    completedAt: entry.completedAt,
+    source: entry.source,
+    title: entry.title,
+    subject: entry.subject,
+    icon: entry.icon,
+    color: entry.color,
+  })).filter(entry => entry.id !== assignmentId);
+  saveHomeworkAssignments(childId, assignments);
+}
+function chooseHomeworkDueDate(childId, topicId) {
+  const plannerDate = getPlannerTopicDueDate(childId, topicId);
+  const labels = [
+    `1. Today (${formatHomeworkDueLabel(toLocalISODate())})`,
+    `2. Tomorrow (${formatHomeworkDueLabel(toLocalISODate(new Date(Date.now() + 86400000)))})`,
+    '3. In 3 days',
+    plannerDate ? `4. Planner day (${formatHomeworkDueLabel(plannerDate)})` : '4. Next Monday',
+  ].join('\n');
+  const answer = prompt(`Choose a due date for this homework:\n${labels}`);
+  if (!answer) return null;
+  if (answer === '1') return toLocalISODate();
+  if (answer === '2') return toLocalISODate(new Date(Date.now() + 86400000));
+  if (answer === '3') return toLocalISODate(new Date(Date.now() + (86400000 * 3)));
+  if (answer === '4') return plannerDate || getWeekKey(new Date(Date.now() + (86400000 * 7)));
+  alert('Please choose 1, 2, 3, or 4.');
+  return null;
+}
+function promptHomeworkAssignment() {
+  if (!parentModeUnlocked) return;
+  const ch = getChild();
+  if (!ch) return;
+  const plannerTopics = PLANNER_DAYS.flatMap(day => getPlannerEntries(ch.id, ch.grade, day.key).map(entry => ({ ...entry, fromPlanner: true })));
+  const available = [...plannerTopics, ...getAvailablePlannerTopics(ch.id, ch.grade, 12)]
+    .filter((entry, index, list) => list.findIndex(other => other.id === entry.id) === index)
+    .filter(entry => !getHomeworkAssignments(ch.id).some(hw => hw.topicId === entry.id));
+  if (!available.length) {
+    alert('There are no unfinished topics available to assign as homework right now.');
+    return;
+  }
+  const options = available.map((topic, index) => `${index + 1}. ${topic.icon} ${topic.subject} - ${topic.title}${topic.fromPlanner ? ' (planned)' : ''}`).join('\n');
+  const answer = prompt(`Assign homework for ${ch.name}.\n\nChoose a topic number:\n${options}`);
+  if (!answer) return;
+  const picked = available[Number(answer) - 1];
+  if (!picked) {
+    alert('Please enter one of the listed topic numbers.');
+    return;
+  }
+  const dueDate = chooseHomeworkDueDate(ch.id, picked.id);
+  if (!dueDate) return;
+  addHomeworkAssignment(ch.id, picked.id, dueDate, picked.fromPlanner ? 'planner' : 'parent');
+  renderDashboard();
+}
+function clearHomeworkAssignment(assignmentId) {
+  if (!parentModeUnlocked) return;
+  const ch = getChild();
+  if (!ch) return;
+  removeHomeworkAssignment(ch.id, assignmentId);
+  renderDashboard();
+}
+function openHomeworkTopic(subject) {
+  openSubject(subject);
+}
+function buildHomeworkCard(ch) {
+  const summary = getHomeworkSummary(ch.id);
+  const headline = summary.pending
+    ? `${summary.pending} assignment${summary.pending === 1 ? '' : 's'} active`
+    : parentModeUnlocked
+      ? `Assign topics with due dates for ${ch.name}.`
+      : `${ch.name} has no homework assigned right now.`;
+  return `<div class="card">
+    <div class="card-title">Homework</div>
+    <div class="planner-header">
+      <div>
+        <div class="planner-title">${summary.overdue ? `${summary.overdue} overdue item${summary.overdue === 1 ? '' : 's'}` : summary.dueToday ? `${summary.dueToday} due today` : 'On track'}</div>
+        <div class="planner-subtitle">${headline}</div>
+      </div>
+      ${parentModeUnlocked ? `<div class="planner-actions"><button class="planner-add-all" onclick="promptHomeworkAssignment()">+ Assign homework</button></div>` : ''}
+    </div>
+    <div style="display:grid;gap:10px">
+      ${summary.assignments.length ? summary.assignments.map(entry => `<div class="planner-item" onclick="openHomeworkTopic('${entry.subject}')">
+        <div class="planner-item-top">
+          <span class="planner-item-subject" style="color:${entry.color}">${entry.icon} ${entry.subject}</span>
+          <span class="topic-status ${entry.overdue ? 'status-partial' : entry.dueToday ? 'status-none' : 'status-done'}">${entry.overdue ? 'Overdue' : entry.dueToday ? 'Due today' : entry.dueLabel}</span>
+        </div>
+        <div class="planner-item-title">${escapeHtml(entry.title)}</div>
+        ${parentModeUnlocked ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px">
+          <div style="font-family:sans-serif;font-size:11px;color:var(--text3)">Assigned ${escapeHtml((entry.assignedAt || '').split('T')[0] || 'recently')}</div>
+          <button class="planner-item-remove" onclick="event.stopPropagation();clearHomeworkAssignment('${entry.id}')">×</button>
+        </div>` : ''}
+      </div>`).join('') : `<div class="planner-empty">${parentModeUnlocked ? 'No homework assigned yet' : 'Nothing due right now'}</div>`}
+    </div>
+  </div>`;
+}
 function promptPlannerTopic(dayKey) {
   if (!parentModeUnlocked) return;
   const ch = getChild();
@@ -678,6 +913,7 @@ function setTopicState(childId, topicId, val) {
   else delete meta.completedAt;
   if (val > 0 || Object.keys(meta).length) STATE.progressMeta[childId][topicId] = meta;
   else delete STATE.progressMeta[childId][topicId];
+  if (val === 2) completeHomeworkForTopic(childId, topicId);
   recordProgressSnapshot(childId);
   saveState(STATE);
   if (val > old && val === 2) awardXP(childId, 10, topicId);
@@ -830,6 +1066,9 @@ function openParentDashboard() {
 
 function openStandaloneParentDashboard() {
   window.open('./parent-dashboard/index.html', '_blank');
+}
+function openCenterDashboard() {
+  window.open('./parent-dashboard/index.html#centre=1', '_blank');
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -990,6 +1229,7 @@ function renderSubject(name, sub, ch) {
   const pct = Math.round((done/topics.length)*100);
   const xp = STATE.xp[ch.id] || 0;
   const noteCount = countTopicNotes(ch.id, ch.grade, name);
+  const homeworkAssignments = getHomeworkAssignments(ch.id);
 
   let html = `
     <div class="progress-header slide-up">
@@ -1018,6 +1258,7 @@ function renderSubject(name, sub, ch) {
     ts.forEach(t => {
       const state = prog[t.id] || 0;
       const note = notes[t.id] || '';
+      const homework = homeworkAssignments.find(entry => entry.topicId === t.id);
       const stateClass = state === 2 ? 'done' : state === 1 ? 'partial' : '';
       const checkClass = state === 2 ? 'done' : state === 1 ? 'partial' : '';
       const checkIcon = state === 2 ? '✓' : state === 1 ? '◆' : '';
@@ -1030,7 +1271,9 @@ function renderSubject(name, sub, ch) {
           <div class="topic-main">
             <div class="topic-title ${titleClass}">${t.title}</div>
             ${parentModeUnlocked ? `<div class="topic-note-preview${note ? ' has-note' : ''}">${note ? '📝 ' + escapeHtml(note) : 'No parent note yet'}</div>` : ''}
+            ${homework ? `<div class="topic-note-preview has-note">📚 ${escapeHtml(homework.dueLabel)}</div>` : ''}
           </div>
+          ${parentModeUnlocked ? `<button class="topic-note-btn${homework ? ' has-note' : ''}" onclick="event.stopPropagation();assignTopicHomework('${t.id}')">${homework ? 'Homework set' : 'Assign work'}</button>` : ''}
           ${parentModeUnlocked ? `<button class="topic-note-btn${note ? ' has-note' : ''}" onclick="event.stopPropagation();openTopicNote('${t.id}')">${note ? 'Edit note' : 'Add note'}</button>` : ''}
           <span class="topic-status ${statusClass}">${statusText}</span>
         </div>`;
@@ -1083,6 +1326,17 @@ function cycleTopic(topicId, rowEl) {
     if (bar) bar.style.width = pct2 + '%';
   }
 }
+function assignTopicHomework(topicId) {
+  if (!parentModeUnlocked) return;
+  const ch = getChild();
+  if (!ch) return;
+  const dueDate = chooseHomeworkDueDate(ch.id, topicId);
+  if (!dueDate) return;
+  addHomeworkAssignment(ch.id, topicId, dueDate, 'subject');
+  const sub = CAPS_CURRICULUM[ch.grade]?.[activeSubject];
+  if (sub) renderSubject(activeSubject, sub, ch);
+  if (currentScreen === 'dash') renderDashboard();
+}
 
 /* ═══════════════════════════════════════════════════════
    DASHBOARD SCREEN
@@ -1095,6 +1349,7 @@ function renderDashboard() {
   const xp = STATE.xp[ch.id] || 0;
   const subjects = CAPS_CURRICULUM[ch.grade] || {};
   const noteCount = countTopicNotes(ch.id, ch.grade);
+  const homeworkSummary = getHomeworkSummary(ch.id);
   const trendSnapshots = getRecentProgressSnapshots(ch.id, ch.grade, 7);
   const trendPoints = trendSnapshots.map(entry => ({ date: entry.date, value: entry.totalDone }));
   const trendDelta = trendPoints.length > 1 ? trendPoints[trendPoints.length - 1].value - trendPoints[0].value : 0;
@@ -1121,9 +1376,9 @@ function renderDashboard() {
         <div class="stat-prog"><div class="stat-prog-fill" style="background:var(--amber);width:${Math.min(xp/1000*100,100)}%"></div></div>
       </div>
       <div class="stat-box">
-        <div class="stat-lbl">Portfolio</div>
-        <div class="stat-val" style="color:var(--purple)">${(STATE.portfolio[ch.id]||[]).length}</div>
-        <div class="stat-prog"><div class="stat-prog-fill" style="background:var(--purple);width:100%"></div></div>
+        <div class="stat-lbl">Homework</div>
+        <div class="stat-val" style="color:${homeworkSummary.overdue ? 'var(--amber)' : 'var(--purple)'}">${homeworkSummary.pending}</div>
+        <div class="stat-prog"><div class="stat-prog-fill" style="background:${homeworkSummary.overdue ? 'var(--amber)' : 'var(--purple)'};width:${Math.min(homeworkSummary.pending * 20, 100)}%"></div></div>
       </div>
     </div>
     <div class="card">
@@ -1144,6 +1399,8 @@ function renderDashboard() {
       </div>`;
   });
   html += `</div>
+
+  ${buildHomeworkCard(ch)}
 
   ${buildDailyChallengeCard(ch)}
 
@@ -1208,7 +1465,7 @@ function renderDashboard() {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       <button onclick="goToWorld()" style="padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--green-bg);color:var(--green);font-family:sans-serif;font-size:13px;font-weight:700;cursor:pointer">🌍 Back to World</button>
       <button onclick="showScreen('portfolio')" style="padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--purple-bg);color:var(--purple);font-family:sans-serif;font-size:13px;font-weight:700;cursor:pointer">📁 Portfolio</button>
-      <button onclick="logToday()" style="padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--blue-bg);color:var(--blue);font-family:sans-serif;font-size:13px;font-weight:700;cursor:pointer">📅 Log Today</button>
+      <button onclick="${parentModeUnlocked ? 'logToday()' : homeworkSummary.next ? `openSubject('${homeworkSummary.next.subject}')` : 'logToday()'}" style="padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--blue-bg);color:var(--blue);font-family:sans-serif;font-size:13px;font-weight:700;cursor:pointer">${parentModeUnlocked ? '📅 Log Today' : homeworkSummary.next ? '📚 Open Homework' : '📅 Log Today'}</button>
       <button onclick="showModal('settings')" style="padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-family:sans-serif;font-size:13px;font-weight:700;cursor:pointer">⚙️ Settings</button>
     </div>
   </div>`;
@@ -1371,6 +1628,17 @@ function buildTutorShareSnapshot(childId = activeChildId) {
       totalPlanned: getPlannerTopicCount(ch.id, weekKey),
       days: plannerDays,
     },
+    homework: getHomeworkAssignments(ch.id, { includeDone: true }).slice(0, 12).map(entry => ({
+      id: entry.id,
+      topicId: entry.topicId,
+      title: entry.title,
+      subject: entry.subject,
+      icon: entry.icon,
+      color: entry.color,
+      dueDate: entry.dueDate,
+      dueLabel: entry.dueLabel,
+      completedAt: entry.completedAt || null,
+    })),
     portfolio: getPortfolioItemsForReport(ch.id).slice(0, 12),
     log: getLogEntriesForReport(ch.id).slice(0, 8),
   };
@@ -2092,6 +2360,11 @@ function renderSettings() {
       <div class="settings-label">Open tutor share link</div>
       <div class="settings-value">Read-only snapshot →</div>
     </div>
+    <div class="settings-row" onclick="openCenterDashboard()" style="cursor:pointer">
+      <div class="settings-icon">🏫</div>
+      <div class="settings-label">Open centre dashboard</div>
+      <div class="settings-value">Read-only multi-child →</div>
+    </div>
     <div class="settings-row" onclick="if(confirm('Reset ALL progress? This cannot be undone.'))resetProgress();" style="cursor:pointer">
       <div class="settings-icon">🗑️</div>
       <div class="settings-label btn-danger">Reset progress</div>
@@ -2182,7 +2455,7 @@ function resetProgress() {
    SERVICE WORKER REGISTRATION
 ════════════════════════════════════════════════════════ */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js?v=18', { updateViaCache: 'none' }).catch(() => {});
+  navigator.serviceWorker.register('./sw.js?v=20', { updateViaCache: 'none' }).catch(() => {});
 }
 
 window.addEventListener('beforeinstallprompt', e => {

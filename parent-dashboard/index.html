@@ -772,8 +772,14 @@ function readTutorSnapshot(){
   const snapshot=decodeSharePayload(params.get('tutor'));
   return snapshot && snapshot.mode==='tutor' && snapshot.child ? snapshot : null;
 }
+function hasHashFlag(name){
+  const hash=(location.hash||'').replace(/^#/,'');
+  const params=new URLSearchParams(hash);
+  return ['1','true','yes','centre','center'].includes(String(params.get(name)||'').toLowerCase());
+}
 const TUTOR_SNAPSHOT = readTutorSnapshot();
 const TUTOR_MODE = Boolean(TUTOR_SNAPSHOT);
+const CENTER_MODE = !TUTOR_MODE && (hasHashFlag('centre') || hasHashFlag('center'));
 function tutorStateFromSnapshot(snapshot){
   const childId=snapshot.child.id||'shared-child';
   return {
@@ -804,7 +810,7 @@ function syncToLearnerState(){
   localStorage.setItem('hs-state',JSON.stringify(learner));
 }
 function save(){
-  if(TUTOR_MODE) return;
+  if(TUTOR_MODE || CENTER_MODE) return;
   localStorage.setItem('hs-parent',JSON.stringify(ST));
   syncToLearnerState();
 }
@@ -832,6 +838,8 @@ function setProg(id,val){
 }
 function tutorNotes(){ return Array.isArray(ST.tutorShare?.notes) ? ST.tutorShare.notes : []; }
 function tutorPlannerDays(){ return Array.isArray(ST.tutorShare?.planner?.days) ? ST.tutorShare.planner.days : []; }
+function tutorHomework(){ return Array.isArray(ST.tutorShare?.homework) ? ST.tutorShare.homework : []; }
+function isReadonlyMode(){ return TUTOR_MODE || CENTER_MODE; }
 function tutorTrendDelta(){
   const trend=Array.isArray(ST.tutorShare?.trend) ? ST.tutorShare.trend : [];
   return trend.length>1 ? (trend[trend.length-1].totalDone - trend[0].totalDone) : 0;
@@ -847,6 +855,50 @@ function tutorBanner(){
     </div>
     <div style="font-size:12px;color:var(--blue);font-weight:600">Readonly • Share-safe</div>
   </div>`;
+}
+function centerBanner(){
+  if(!CENTER_MODE) return '';
+  return `<div style="margin-bottom:18px;padding:14px 16px;border-radius:14px;border:1px solid var(--amber-mid);background:linear-gradient(135deg,var(--amber-bg),#ffffff);display:flex;gap:14px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap">
+    <div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--amber);margin-bottom:4px">Centre dashboard</div>
+      <div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:3px">${ST.children.length} learners available in read-only mode</div>
+      <div style="font-size:12px;color:var(--ink2);line-height:1.6">This view is designed for tutors and centres to review progress across multiple learners without editing family data.</div>
+    </div>
+    <div style="font-size:12px;color:var(--amber);font-weight:600">Readonly • Multi-learner</div>
+  </div>`;
+}
+function getCenterAggregates(){
+  const rows=ST.children.map(c=>{
+    const prev=activeChild;
+    activeChild=c.id;
+    const {total,done}=calcTotals(c.grade);
+    const inProgress=countInProgress();
+    const portfolio=(ST.portfolio[c.id]||[]).length;
+    const logs=(ST.log[c.id]||[]).length;
+    const homework=tutorHomework && false;
+    activeChild=prev;
+    return {
+      id:c.id,
+      name:c.name,
+      grade:c.grade,
+      initials:c.initials,
+      color:c.color,
+      total,
+      done,
+      inProgress,
+      pct: total ? Math.round(done/total*100) : 0,
+      portfolio,
+      logs,
+    };
+  });
+  const totals=rows.reduce((sum,row)=>({
+    learners: sum.learners + 1,
+    done: sum.done + row.done,
+    total: sum.total + row.total,
+    portfolio: sum.portfolio + row.portfolio,
+    logs: sum.logs + row.logs,
+  }),{learners:0,done:0,total:0,portfolio:0,logs:0});
+  return {rows,totals};
 }
 function applyTutorModeChrome(){
   if(!TUTOR_MODE) return;
@@ -870,6 +922,27 @@ function applyTutorModeChrome(){
     lockBtn.style.opacity='.6';
     lockBtn.style.cursor='default';
   }
+}
+function applyCenterModeChrome(){
+  if(!CENTER_MODE) return;
+  const lockTitle=document.querySelector('.lock-title');
+  if(lockTitle) lockTitle.textContent='Centre Dashboard';
+  const lockSub=document.querySelector('.lock-sub');
+  if(lockSub) lockSub.textContent='Read-only tutor and centre access';
+  const lockHint=document.querySelector('.lock-hint');
+  if(lockHint) lockHint.textContent='Centre PIN: 2468';
+  const brandTag=document.querySelector('.brand-tag');
+  if(brandTag) brandTag.textContent='Centre Dashboard';
+  const planPill=document.querySelector('.plan-pill');
+  if(planPill) planPill.innerHTML='<span class="plan-name">CENTRE VIEW</span><span class="plan-upgrade">Read-only</span>';
+  const topbarBadges=document.querySelector('.topbar-badges');
+  if(topbarBadges) topbarBadges.innerHTML='<span class="tbadge tbadge-popia">🏫 Centre</span><span class="tbadge tbadge-offline">👁️ Read-only</span>';
+  ['ni-materials','ni-apps','ni-upgrade','ni-settings'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.style.display='none';
+  });
+  const addChildBtn=document.querySelector('.add-child-btn');
+  if(addChildBtn) addChildBtn.style.display='none';
 }
 function calcPct(grade,subject){
   const topics=(CURRICULUM[grade]?.[subject]?.topics)||[];
@@ -911,6 +984,18 @@ function pinSubmit(){
     renderSidebar(); nav('dashboard');
     return;
   }
+  if(CENTER_MODE){
+    if(String(pinEntry)==='2468'){
+      document.getElementById('lock-screen').classList.add('gone');
+      renderSidebar(); nav('dashboard');
+    } else {
+      pinEntry='';
+      [0,1,2,3].forEach(i=>document.getElementById('pd'+i).classList.remove('filled'));
+      document.querySelector('.lock-hint').textContent='Incorrect centre PIN — try again';
+      document.querySelector('.lock-hint').style.color='#f87171';
+    }
+    return;
+  }
   if(String(pinEntry)===String(ST.pin)){
     document.getElementById('lock-screen').classList.add('gone');
     renderSidebar(); nav('dashboard');
@@ -926,6 +1011,13 @@ function lockApp(){
   pinEntry='';
   [0,1,2,3].forEach(i=>document.getElementById('pd'+i).classList.remove('filled'));
   resetPinHint();
+  if(CENTER_MODE){
+    const hint=document.querySelector('.lock-hint');
+    if(hint){
+      hint.textContent='Centre PIN: 2468';
+      hint.style.color='';
+    }
+  }
   document.getElementById('lock-screen').classList.remove('gone');
 }
 document.addEventListener('keydown',e=>{
@@ -937,7 +1029,7 @@ document.addEventListener('keydown',e=>{
 
 /* ═══════════ NAV ═══════════ */
 function nav(page){
-  if(TUTOR_MODE && ['materials','apps','upgrade','settings'].includes(page)) page='dashboard';
+  if((TUTOR_MODE || CENTER_MODE) && ['materials','apps','upgrade','settings'].includes(page)) page='dashboard';
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const ni=document.getElementById('ni-'+page);
@@ -945,7 +1037,7 @@ function nav(page){
   const titles={dashboard:'Dashboard',curriculum:'Curriculum',portfolio:'Portfolio',
     log:'Learning Log',materials:'Materials Library',apps:'EdTech Apps',
     upgrade:'Plans & Pricing',settings:'Settings'};
-  document.getElementById('topbar-title').textContent = titles[page]||page;
+  document.getElementById('topbar-title').textContent = CENTER_MODE && page==='dashboard' ? 'Centre Dashboard' : (titles[page]||page);
   const pages={dashboard:renderDashboard,curriculum:renderCurriculum,
     portfolio:renderPortfolio,log:renderLog,materials:renderMaterials,
     apps:renderApps,upgrade:renderUpgrade,settings:renderSettings};
@@ -968,7 +1060,7 @@ function switchChild(id){
   activeChild=id; renderSidebar(); nav(currentPage);
 }
 function addChild(){
-  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
+  if(isReadonlyMode()){alert(`${CENTER_MODE ? 'Centre' : 'Tutor'} view is read-only.`); return;}
   const name=prompt("Child's name?"); if(!name)return;
   const grade=parseInt(prompt("Grade? (1–7)"));
   if(!grade||grade<1||grade>7){alert('Grade must be 1–7');return;}
@@ -980,6 +1072,85 @@ function addChild(){
 
 /* ═══════════ DASHBOARD ═══════════ */
 function renderDashboard(){
+  if(CENTER_MODE){
+    const {rows,totals}=getCenterAggregates();
+    const avgPct=totals.total ? Math.round(totals.done/totals.total*100) : 0;
+    document.getElementById('main-content').innerHTML=`
+    <div class="fade-in">
+      ${centerBanner()}
+      <div style="margin-bottom:20px">
+        <h2 style="font-family:'DM Serif Display',serif;font-size:26px;margin-bottom:4px">Centre Progress Overview</h2>
+        <p style="color:var(--ink2);font-size:13px">${new Date().toLocaleDateString('en-ZA',{weekday:'long',year:'numeric',month:'long',day:'numeric'})} · Read-only multi-learner view</p>
+      </div>
+
+      <div class="g4 stagger" style="margin-bottom:20px">
+        <div class="stat">
+          <div class="stat-label">Learners</div>
+          <div class="stat-num" style="color:var(--green)">${totals.learners}</div>
+          <div class="stat-sub">active centre roster</div>
+          <div class="stat-bar"><div class="stat-fill" style="width:100%;background:var(--green)"></div></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Topics Completed</div>
+          <div class="stat-num" style="color:var(--blue)">${totals.done}</div>
+          <div class="stat-sub">of ${totals.total} total topics</div>
+          <div class="stat-bar"><div class="stat-fill" style="width:${avgPct}%;background:var(--blue)"></div></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Portfolio Items</div>
+          <div class="stat-num" style="color:var(--purple)">${totals.portfolio}</div>
+          <div class="stat-sub">shared evidence items</div>
+          <div class="stat-bar"><div class="stat-fill" style="width:${Math.min(totals.portfolio*10,100)}%;background:var(--purple)"></div></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Log Entries</div>
+          <div class="stat-num" style="color:var(--amber)">${totals.logs}</div>
+          <div class="stat-sub">learning records available</div>
+          <div class="stat-bar"><div class="stat-fill" style="width:${Math.min(totals.logs*8,100)}%;background:var(--amber)"></div></div>
+        </div>
+      </div>
+
+      <div class="g2-3">
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Learner Roster</span>
+            <span class="card-action" onclick="window.print()">Print →</span>
+          </div>
+          ${rows.map(row=>`
+            <div class="subj-row" onclick="switchChild('${row.id}')">
+              <div class="child-avatar" style="background:${row.color};width:28px;height:28px;font-size:11px">${row.initials}</div>
+              <div class="subj-label">${row.name} · Grade ${row.grade}</div>
+              <div class="subj-count">${row.done}/${row.total}</div>
+              <div class="mini-bar"><div class="mini-fill" style="width:${row.pct}%;background:${row.color}"></div></div>
+              <div class="subj-pct">${row.pct}%</div>
+            </div>`).join('')}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="card">
+            <div class="card-head">
+              <span class="card-title">Selected Learner</span>
+              <span class="card-action" onclick="nav('curriculum')">Open →</span>
+            </div>
+            <div style="font-size:22px;font-weight:700;color:var(--ink);margin-bottom:6px">${child().name}</div>
+            <div style="font-size:13px;color:var(--ink2);margin-bottom:10px">Grade ${child().grade} · ${calcTotals(child().grade).done}/${calcTotals(child().grade).total} topics done</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <button class="btn btn-sm" onclick="nav('curriculum')" style="background:var(--green-bg);color:var(--green-d);border-color:var(--green-mid)">📚 Curriculum</button>
+              <button class="btn btn-sm" onclick="nav('portfolio')" style="background:var(--purple-bg);color:var(--purple);border-color:var(--purple-mid)">📁 Portfolio</button>
+              <button class="btn btn-sm" onclick="nav('log')" style="background:var(--blue-bg);color:var(--blue);border-color:var(--blue-mid)">📅 Log</button>
+              <button class="btn btn-sm btn-primary" onclick="window.print()">🖨️ Print</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <span class="card-title">Centre Notes</span>
+            </div>
+            <div style="font-size:13px;color:var(--ink2);line-height:1.7">Use the learner switcher on the left to drill into each learner's curriculum, evidence, and learning log. This view is intentionally read-only for tutors and centre staff.</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+    return;
+  }
   const ch=child(); const {total,done}=calcTotals(ch.grade);
   const port=(ST.portfolio[ch.id]||[]).length;
   const logs=(ST.log[ch.id]||[]).length;
@@ -987,6 +1158,7 @@ function renderDashboard(){
   const pct=total?Math.round(done/total*100):0;
   const notes=tutorNotes();
   const planner=tutorPlannerDays();
+  const homework=tutorHomework();
   const plannerTotal=planner.reduce((sum,day)=>sum+(day.entries?.length||0),0);
   const trendDelta=tutorTrendDelta();
 
@@ -1124,6 +1296,19 @@ function renderDashboard(){
               </div>`).join('')}
           </div>
         </div>
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Homework</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            ${(homework.length ? homework : [{title:'No homework shared',subject:'Family snapshot',dueLabel:'No due date',icon:'📚'}]).map(entry=>`
+              <div style="padding:10px 12px;border-radius:10px;background:var(--surface2);border:1px solid var(--border2)">
+                <div style="font-size:11px;font-weight:700;color:${entry.color||'var(--ink3)'};margin-bottom:4px">${entry.icon||'📚'} ${entry.subject}</div>
+                <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:3px">${entry.title}</div>
+                <div style="font-size:12px;color:var(--ink2)">${entry.completedAt ? 'Completed' : (entry.dueLabel||'No due date')}</div>
+              </div>`).join('')}
+          </div>
+        </div>
       </div>` : ''}
   </div>`;
   document.getElementById('main-content').innerHTML=html;
@@ -1200,7 +1385,7 @@ function openSubject(name){
 }
 
 function changeGrade(g){
-  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
+  if(isReadonlyMode()){alert(`${CENTER_MODE ? 'Centre' : 'Tutor'} view is read-only.`); return;}
   const ch=child(); ch.grade=parseInt(g); save();
   openSubjectName=null; renderCurriculum();
 }
@@ -1273,7 +1458,7 @@ function renderSubjectDetail(name,sub,ch){
 }
 
 function cycleT(id,row){
-  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
+  if(isReadonlyMode()){alert(`${CENTER_MODE ? 'Centre' : 'Tutor'} view is read-only.`); return;}
   const cur=prog()[id]||0;
   const next=(cur+1)%3;
   setProg(id,next);
@@ -1329,7 +1514,7 @@ function renderPortfolio(){
   </div>`;
 }
 function addPortItem(){
-  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
+  if(isReadonlyMode()){alert(`${CENTER_MODE ? 'Centre' : 'Tutor'} view is read-only.`); return;}
   const title=prompt('What is this evidence of?'); if(!title)return;
   const subject=prompt('Subject?')||'General';
   const ch=child();
@@ -1380,7 +1565,7 @@ function renderLog(){
   </div>`;
 }
 function logToday(){
-  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
+  if(isReadonlyMode()){alert(`${CENTER_MODE ? 'Centre' : 'Tutor'} view is read-only.`); return;}
   const subj=prompt('Subjects covered today?'); if(!subj)return;
   const time=prompt('Time spent? (e.g. 2h 30min)')||'—';
   const mood=prompt('How did it go? (Great / Good / OK / Challenging)')||'Good';
@@ -1554,7 +1739,7 @@ function whyCard(icon,title,body){
 
 /* ═══════════ SETTINGS ═══════════ */
 function renderSettings(){
-  if(TUTOR_MODE){
+  if(isReadonlyMode()){
     nav('dashboard');
     return;
   }
@@ -1639,20 +1824,20 @@ function renderSettings(){
 }
 
 function changePin(){
-  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
+  if(isReadonlyMode()){alert(`${CENTER_MODE ? 'Centre' : 'Tutor'} view is read-only.`); return;}
   const n=prompt('Enter new 4-digit PIN:');
   if(!n||n.length!==4||isNaN(n)){alert('PIN must be exactly 4 digits');return;}
   ST.pin=n; save(); alert('PIN updated!');
 }
 function editChild(id){
-  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
+  if(isReadonlyMode()){alert(`${CENTER_MODE ? 'Centre' : 'Tutor'} view is read-only.`); return;}
   const c=ST.children.find(x=>x.id===id);
   const g=parseInt(prompt(`Grade for ${c.name}?`,c.grade));
   if(!g||g<1||g>7){alert('Grade must be 1–7');return;}
   c.grade=g; save(); renderSettings(); renderSidebar();
 }
 function backupData(){
-  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
+  if(isReadonlyMode()){alert(`${CENTER_MODE ? 'Centre' : 'Tutor'} view is read-only.`); return;}
   const blob=new Blob([JSON.stringify(ST,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
@@ -1660,7 +1845,7 @@ function backupData(){
   a.click(); URL.revokeObjectURL(url);
 }
 function importData(){
-  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
+  if(isReadonlyMode()){alert(`${CENTER_MODE ? 'Centre' : 'Tutor'} view is read-only.`); return;}
   const input=document.createElement('input');
   input.type='file'; input.accept='.json';
   input.onchange=e=>{
@@ -1672,12 +1857,13 @@ function importData(){
   input.click();
 }
 function resetAll(){
-  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
+  if(isReadonlyMode()){alert(`${CENTER_MODE ? 'Centre' : 'Tutor'} view is read-only.`); return;}
   ST.progress={};ST.xp={};save();alert('Progress reset.');nav('dashboard');
 }
 
 /* ═══ BOOT ═══ */
 applyTutorModeChrome();
+applyCenterModeChrome();
 renderSidebar();
 </script>
 </body>

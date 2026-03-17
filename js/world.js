@@ -655,14 +655,25 @@ function createSageCompanion() {
 function getSageHint() {
   const child = typeof getChild === 'function' ? getChild() : null;
   if (!child) return { title: 'Sage', body: 'Choose a learner to begin.', tone: 'idle' };
+  const homework = typeof getHomeworkSummary === 'function' ? getHomeworkSummary(child.id) : { pending: 0, overdue: 0, dueToday: 0, next: null };
 
   if (nearBuilding?.userData?.subData?.isHome) {
+    if (homework.pending) {
+      return { title: 'Sage', body: `${homework.overdue ? `${homework.overdue} overdue homework item${homework.overdue === 1 ? '' : 's'}` : `${homework.pending} homework assignment${homework.pending === 1 ? '' : 's'}`} waiting at Home Base.`, tone: 'home' };
+    }
     return { title: 'Sage', body: 'Home Base is open. Step inside to see your hub.', tone: 'home' };
   }
   if (nearBuilding?.userData?.subData?.isArcade) {
     return { title: 'Sage', body: 'The Arcade is ready. A challenge run could boost your XP today.', tone: 'arcade' };
   }
   if (nearBuilding) {
+    if (homework.next && homework.next.subject === nearBuilding.userData.subject && !homework.next.done) {
+      return {
+        title: 'Sage',
+        body: `Homework stop: ${homework.next.title}. ${homework.next.dueLabel}.`,
+        tone: 'quest',
+      };
+    }
     return {
       title: 'Sage',
       body: `You are near ${nearBuilding.userData.subject}. Press Space to enter.`,
@@ -671,6 +682,13 @@ function getSageHint() {
   }
 
   const challenge = typeof getDailyChallenge === 'function' ? getDailyChallenge(child.id) : null;
+  if (homework.overdue || homework.dueToday) {
+    return {
+      title: 'Sage',
+      body: homework.overdue ? `You have overdue homework in ${homework.next?.subject || 'your subjects'}. Head home or drive to that building.` : `Homework is due today: ${homework.next?.title || 'open your dashboard for details'}.`,
+      tone: 'quest',
+    };
+  }
   if (challenge && !challenge.completed) {
     return {
       title: 'Sage',
@@ -1686,7 +1704,15 @@ function animate() {
       enterBtn.style.display = 'block';
       enterBtn.textContent = 'Enter ' + closest.userData.subData.icon;
       const sagePrompt = document.getElementById('sage-prompt');
-      if (sagePrompt) sagePrompt.textContent = closest.userData.subData.isHome ? 'Sage says: Home is ready.' : 'Sage says: You found your next stop.';
+      if (sagePrompt) {
+        const homework = typeof getHomeworkSummary === 'function' ? getHomeworkSummary(activeChildId) : null;
+        const matchingHomework = homework?.next && homework.next.subject === closest.userData.subject ? homework.next : null;
+        sagePrompt.textContent = closest.userData.subData.isHome
+          ? (homework?.pending ? `Sage says: ${homework.pending} homework item${homework.pending === 1 ? '' : 's'} waiting at home.` : 'Sage says: Home is ready.')
+          : matchingHomework
+            ? `Sage says: Homework here - ${matchingHomework.dueLabel.toLowerCase()}.`
+            : 'Sage says: You found your next stop.';
+      }
     } else {
       bar.classList.add('hidden');
       enterBtn.style.display = 'none';
