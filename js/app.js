@@ -23,6 +23,7 @@ if (!STATE.portfolio) STATE.portfolio = {};  // { childId: [] }
 if (!STATE.log) STATE.log = {};              // { childId: [] }
 if (!STATE.notes) STATE.notes = {};          // { childId: { topicId: string } }
 if (!STATE.planner) STATE.planner = {};      // { childId: { [weekKey]: { monday: topicId[] ... } } }
+if (!STATE.arcadeOrigins) STATE.arcadeOrigins = [window.location.origin, 'http://127.0.0.1:8080', 'http://localhost:8080'];
 if (!STATE.pin) STATE.pin = '1234';
 if (!STATE.milestones) STATE.milestones = {};
 STATE.children = STATE.children.map((child, index) => ({
@@ -47,6 +48,7 @@ let deferredInstallPrompt = null;
 let installPromptAvailable = false;
 let worldBooting = false;
 let currentArcadeGameId = null;
+let activeArcadeSession = null;
 
 const PARENT_SCREENS = ['dash', 'portfolio', 'log', 'report'];
 const PLANNER_DAYS = [
@@ -124,6 +126,52 @@ function getArcadeTopicLabels(game, grade) {
     .map(topicId => getTopicById(grade, topicId))
     .filter(Boolean)
     .slice(0, 4);
+}
+function isAllowedArcadeOrigin(origin) {
+  return (STATE.arcadeOrigins || []).includes(origin);
+}
+function sendArcadeAck(source, origin, sessionId, status = 'ok', extra = {}) {
+  if (!source || !origin) return;
+  source.postMessage({
+    type: 'HS_ACK',
+    sessionId,
+    status,
+    childId: activeChildId,
+    xp: STATE.xp[activeChildId] || 0,
+    ...extra,
+  }, origin);
+}
+function buildArcadeSessionPayload(game) {
+  const ch = getChild();
+  if (!ch) return null;
+  const sessionId = 'arcade-' + Date.now();
+  const topics = (game.topicIds || []).map(topicId => getTopicById(ch.grade, topicId)).filter(Boolean);
+  activeArcadeSession = {
+    sessionId,
+    gameId: game.id,
+    gameTitle: game.title,
+    childId: ch.id,
+    grade: ch.grade,
+    origin: game.origin || window.location.origin,
+    topicIds: topics.map(topic => topic.id),
+  };
+  return {
+    type: 'HS_INIT',
+    sessionId,
+    gameId: game.id,
+    gameTitle: game.title,
+    child: {
+      id: ch.id,
+      name: ch.name,
+      grade: ch.grade,
+    },
+    xp: STATE.xp[ch.id] || 0,
+    topicTags: topics.map(topic => ({
+      id: topic.id,
+      subject: topic.subject,
+      title: topic.title,
+    })),
+  };
 }
 function ensurePlannerWeek(childId, weekKey = getWeekKey()) {
   if (!STATE.planner[childId]) STATE.planner[childId] = {};
@@ -540,6 +588,7 @@ function renderIntro() {
 
 function selectChild(id) {
   activeChildId = id;
+  activeArcadeSession = null;
   STATE.lastActiveChildId = id;
   saveState(STATE);
   document.querySelectorAll('.child-card').forEach(el => el.classList.remove('selected'));
@@ -771,8 +820,22 @@ function launchArcadeGame(gameId) {
   const game = getArcadeGamesForGrade(ch?.grade || 0).find(entry => entry.id === gameId);
   if (!ch || !game) return;
   currentArcadeGameId = gameId;
-  const tagged = getArcadeTopicLabels(game, ch.grade).map(topic => topic.title).join('\n• ');
-  alert(`${game.icon} ${game.title}\n\nThis Arcade launch flow is now wired into the world.\n\nTagged CAPS topics:\n• ${tagged || 'No tags configured yet'}\n\nNext Sprint 3 step: connect live game events through the XP bridge API.`);
+  const initPayload = buildArcadeSessionPayload(game);
+  if (!initPayload) return;
+  const target = window.open(game.launchUrl || './arcade/bridge-demo.html', '_blank');
+  if (!target) {
+    alert('Allow pop-ups to launch the Maths Arcade game.');
+    return;
+  }
+  const origin = game.origin || window.location.origin;
+  const sendInit = () => {
+    try {
+      target.postMessage(initPayload, origin);
+    } catch {}
+  };
+  sendInit();
+  setTimeout(sendInit, 400);
+  alert(`${game.icon} ${game.title}\n\nLaunching Arcade bridge session.\n\nAllowed origin: ${origin}\nSession: ${initPayload.sessionId}`);
 }
 
 function renderSubject(name, sub, ch) {
@@ -1267,6 +1330,79 @@ function exportPortfolio() {
   showScreen('report');
 }
 
+function handleArcadeMessage(event) {
+  if (!event?.data || typeof event.data !== 'object') return;
+  const { type, sessionId, payload } = event.data;
+  if (!type || !sessionId) return;
+  if (!isAllowedArcadeOrigin(event.origin)) {
+    sendArcadeAck(event.source, event.origin, sessionId, 'blocked', { reason: 'origin_not_allowed' });
+    return;
+  }
+  if (!activeArcadeSession || activeArcadeSession.sessionId !== sessionId) {
+    sendArcadeAck(event.source, event.origin, sessionId, 'blocked', { reason: 'session_not_active' });
+    return;
+  }
+  if (activeArcadeSession.origin !== event.origin) {
+    sendArcadeAck(event.source, event.origin, sessionId, 'blocked', { reason: 'origin_session_mismatch' });
+    return;
+  }
+
+  const childId = activeArcadeSession.childId;
+  const child = STATE.children.find(entry => entry.id === childId);
+  if (!child) {
+    sendArcadeAck(event.source, event.origin, sessionId, 'blocked', { reason: 'child_not_found' });
+    return;
+  }
+
+  if (type === 'HS_READY') {
+    sendArcadeAck(event.source, event.origin, sessionId, 'ok', { ready: true });
+    return;
+  }
+
+  if (type === 'HS_XP') {
+    const amount = Math.max(0, Math.min(Number(payload?.amount || 0), 250));
+    if (!amount) {
+      sendArcadeAck(event.source, event.origin, sessionId, 'ignored', { reason: 'invalid_xp' });
+      return;
+    }
+    STATE.xp[childId] = (STATE.xp[childId] || 0) + amount;
+    syncMilestones(childId);
+    recordProgressSnapshot(childId);
+    saveState(STATE);
+    if (childId === activeChildId) {
+      updateHUD();
+      if (typeof refreshWorldMilestones === 'function') refreshWorldMilestones();
+      showXPToast(amount);
+    }
+    sendArcadeAck(event.source, event.origin, sessionId, 'ok', { awardedXp: amount });
+    return;
+  }
+
+  if (type === 'HS_TOPIC_DONE') {
+    const topicIds = Array.isArray(payload?.topicIds) ? payload.topicIds : [payload?.topicId].filter(Boolean);
+    const applied = [];
+    topicIds.forEach(topicId => {
+      if (!activeArcadeSession.topicIds.includes(topicId)) return;
+      const topic = getTopicById(child.grade, topicId);
+      if (!topic) return;
+      const current = getProgress(childId)[topicId] || 0;
+      if (current !== 2) {
+        setTopicState(childId, topicId, 2);
+        applied.push(topicId);
+      }
+    });
+    sendArcadeAck(event.source, event.origin, sessionId, applied.length ? 'ok' : 'ignored', { appliedTopicIds: applied });
+    return;
+  }
+
+  if (type === 'HS_PING') {
+    sendArcadeAck(event.source, event.origin, sessionId, 'ok', { pong: true });
+    return;
+  }
+
+  sendArcadeAck(event.source, event.origin, sessionId, 'ignored', { reason: 'unknown_type' });
+}
+
 /* ═══════════════════════════════════════════════════════
    LEARNING LOG
 ════════════════════════════════════════════════════════ */
@@ -1757,6 +1893,7 @@ function resetProgress() {
   STATE.progressMeta = {};
   STATE.progressHistory = {};
   STATE.xp = {};
+  activeArcadeSession = null;
   saveState(STATE);
   closeModal('settings');
   updateHUD();
@@ -1767,7 +1904,7 @@ function resetProgress() {
    SERVICE WORKER REGISTRATION
 ════════════════════════════════════════════════════════ */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js?v=12', { updateViaCache: 'none' }).catch(() => {});
+  navigator.serviceWorker.register('./sw.js?v=13', { updateViaCache: 'none' }).catch(() => {});
 }
 
 window.addEventListener('beforeinstallprompt', e => {
@@ -1780,6 +1917,8 @@ window.addEventListener('appinstalled', () => {
   deferredInstallPrompt = null;
   installPromptAvailable = false;
 });
+
+window.addEventListener('message', handleArcadeMessage);
 
 document.addEventListener('keydown', e => {
   if (!isParentPinOpen()) return;

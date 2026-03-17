@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maths Arcade Bridge Demo</title>
+<style>
+  :root{
+    --bg:#111827;
+    --panel:#1f2937;
+    --panel-2:#0f172a;
+    --text:#f8fafc;
+    --muted:#94a3b8;
+    --accent:#f97316;
+    --green:#22c55e;
+    --border:rgba(255,255,255,.12);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:radial-gradient(circle at top,#1e293b 0%,#0f172a 60%,#020617 100%);color:var(--text);min-height:100vh;padding:24px}
+  .shell{max-width:880px;margin:0 auto;display:grid;gap:16px}
+  .hero,.panel{background:rgba(31,41,55,.92);border:1px solid var(--border);border-radius:20px;padding:20px}
+  .eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.45px;color:#fdba74;font-weight:700;margin-bottom:8px}
+  h1{margin:0 0 8px;font-size:34px;letter-spacing:-1px}
+  p{margin:0;color:var(--muted);line-height:1.6}
+  .grid{display:grid;grid-template-columns:1.3fr .9fr;gap:16px}
+  .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+  button{border:none;border-radius:12px;padding:11px 14px;font-size:14px;font-weight:700;cursor:pointer}
+  .primary{background:var(--accent);color:white}
+  .ghost{background:#334155;color:var(--text)}
+  .success{background:var(--green);color:#062e16}
+  .tag{display:inline-flex;align-items:center;gap:6px;background:#1e293b;border:1px solid var(--border);padding:6px 10px;border-radius:999px;font-size:12px;color:#cbd5e1;margin:6px 6px 0 0}
+  .log{background:var(--panel-2);border-radius:16px;padding:14px;min-height:220px;white-space:pre-wrap;font-family:Consolas,monospace;font-size:12px;color:#cbd5e1}
+</style>
+</head>
+<body>
+  <div class="shell">
+    <div class="hero">
+      <div class="eyebrow">Maths Arcade</div>
+      <h1>Bridge Demo</h1>
+      <p>This demo listens for <code>HS_INIT</code>, replies with <code>HS_READY</code>, and can send XP and topic completion messages back to the LMS.</p>
+      <div id="topics"></div>
+      <div class="btns">
+        <button class="primary" onclick="sendReady()">Send HS_READY</button>
+        <button class="success" onclick="awardXp()">Send 15 XP</button>
+        <button class="ghost" onclick="markTopicDone()">Mark first topic done</button>
+        <button class="ghost" onclick="pingLms()">Send ping</button>
+      </div>
+    </div>
+    <div class="grid">
+      <div class="panel">
+        <div class="eyebrow">Session</div>
+        <div id="session"></div>
+      </div>
+      <div class="panel">
+        <div class="eyebrow">Message Log</div>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+<script>
+let session = null;
+let openerOrigin = window.location.origin;
+
+function log(message) {
+  const el = document.getElementById('log');
+  el.textContent = `[${new Date().toLocaleTimeString()}] ${message}\n` + el.textContent;
+}
+
+function renderSession() {
+  const host = document.getElementById('session');
+  if (!session) {
+    host.innerHTML = '<p>Waiting for <code>HS_INIT</code> from HomeSchool Hub.</p>';
+    document.getElementById('topics').innerHTML = '';
+    return;
+  }
+  host.innerHTML = `
+    <p><strong>Game:</strong> ${session.gameTitle}</p>
+    <p><strong>Child:</strong> ${session.child.name} · Grade ${session.child.grade}</p>
+    <p><strong>Session:</strong> ${session.sessionId}</p>
+    <p><strong>XP before launch:</strong> ${session.xp}</p>
+  `;
+  document.getElementById('topics').innerHTML = (session.topicTags || []).map(topic => `<span class="tag">${topic.subject}: ${topic.title}</span>`).join('');
+}
+
+function send(message) {
+  if (!window.opener || !session) {
+    log('No opener/session available yet.');
+    return;
+  }
+  window.opener.postMessage(message, openerOrigin);
+  log('Sent ' + message.type);
+}
+
+function sendReady() {
+  if (!session) return log('Cannot send HS_READY before HS_INIT.');
+  send({ type: 'HS_READY', sessionId: session.sessionId });
+}
+
+function awardXp() {
+  if (!session) return log('Cannot send HS_XP before HS_INIT.');
+  send({ type: 'HS_XP', sessionId: session.sessionId, payload: { amount: 15 } });
+}
+
+function markTopicDone() {
+  if (!session) return log('Cannot mark a topic before HS_INIT.');
+  const first = session.topicTags && session.topicTags[0];
+  if (!first) return log('No tagged topic available for this game.');
+  send({ type: 'HS_TOPIC_DONE', sessionId: session.sessionId, payload: { topicIds: [first.id] } });
+}
+
+function pingLms() {
+  if (!session) return log('Cannot ping before HS_INIT.');
+  send({ type: 'HS_PING', sessionId: session.sessionId });
+}
+
+window.addEventListener('message', event => {
+  if (!event.data || typeof event.data !== 'object') return;
+  if (event.data.type === 'HS_INIT') {
+    openerOrigin = event.origin;
+    session = event.data;
+    renderSession();
+    log('Received HS_INIT for ' + session.gameTitle);
+    sendReady();
+    return;
+  }
+  if (event.data.type === 'HS_ACK') {
+    log('Received HS_ACK: ' + JSON.stringify(event.data));
+  }
+});
+
+renderSession();
+</script>
+</body>
+</html>
