@@ -16,9 +16,13 @@ function saveState(s) { localStorage.setItem('hs-state', JSON.stringify(s)); }
 let STATE = loadState();
 if (!STATE.children) STATE.children = DEFAULT_CHILDREN;
 if (!STATE.progress) STATE.progress = {};    // { childId: { topicId: 0|1|2 } }
+if (!STATE.progressMeta) STATE.progressMeta = {}; // { childId: { topicId: { completedAt?, updatedAt? } } }
+if (!STATE.progressHistory) STATE.progressHistory = {}; // { childId: ProgressSnapshot[] }
 if (!STATE.xp) STATE.xp = {};               // { childId: number }
 if (!STATE.portfolio) STATE.portfolio = {};  // { childId: [] }
 if (!STATE.log) STATE.log = {};              // { childId: [] }
+if (!STATE.notes) STATE.notes = {};          // { childId: { topicId: string } }
+if (!STATE.planner) STATE.planner = {};      // { childId: { [weekKey]: { monday: topicId[] ... } } }
 if (!STATE.pin) STATE.pin = '1234';
 if (!STATE.milestones) STATE.milestones = {};
 STATE.children = STATE.children.map((child, index) => ({
@@ -44,6 +48,13 @@ let installPromptAvailable = false;
 let worldBooting = false;
 
 const PARENT_SCREENS = ['dash', 'portfolio', 'log'];
+const PLANNER_DAYS = [
+  { key: 'monday', label: 'Mon' },
+  { key: 'tuesday', label: 'Tue' },
+  { key: 'wednesday', label: 'Wed' },
+  { key: 'thursday', label: 'Thu' },
+  { key: 'friday', label: 'Fri' },
+];
 
 function getChild() { return STATE.children.find(c => c.id === activeChildId); }
 function getPreferredChildId() {
@@ -53,9 +64,313 @@ function getPreferredChildId() {
   return STATE.children[0]?.id || null;
 }
 function getProgress(childId) { return STATE.progress[childId] || {}; }
+function getProgressMeta(childId) { return STATE.progressMeta[childId] || {}; }
+function getNotes(childId) { return STATE.notes[childId] || {}; }
 function isParentScreen(id) { return PARENT_SCREENS.includes(id); }
 function getCarName(child) { return child?.carName || DEFAULT_CAR_NAME; }
 function getCarColor(child) { return child?.carColor || child?.color || CAR_COLOR_OPTIONS[0]; }
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+function getTopicNote(childId, topicId) {
+  return getNotes(childId)[topicId] || '';
+}
+function setTopicNote(childId, topicId, note) {
+  const nextNote = String(note || '').trim();
+  if (!STATE.notes[childId]) STATE.notes[childId] = {};
+  if (nextNote) STATE.notes[childId][topicId] = nextNote;
+  else delete STATE.notes[childId][topicId];
+  if (!Object.keys(STATE.notes[childId]).length) delete STATE.notes[childId];
+  saveState(STATE);
+}
+function countTopicNotes(childId, grade, subject) {
+  const notes = getNotes(childId);
+  if (!subject) return Object.keys(notes).length;
+  const topics = CAPS_CURRICULUM[grade]?.[subject]?.topics || [];
+  return topics.filter(topic => notes[topic.id]).length;
+}
+function getStartOfWeek(date = new Date()) {
+  const start = new Date(date);
+  const weekday = (start.getDay() + 6) % 7;
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - weekday);
+  return start;
+}
+function getWeekKey(date = new Date()) {
+  return toLocalISODate(getStartOfWeek(date));
+}
+function formatWeekLabel(weekKey) {
+  const start = fromISODate(weekKey);
+  if (!start) return weekKey;
+  const end = new Date(start);
+  end.setDate(end.getDate() + 4);
+  return start.toLocaleDateString('en-ZA', { day:'numeric', month:'short' }) + ' - ' +
+    end.toLocaleDateString('en-ZA', { day:'numeric', month:'short' });
+}
+function getPlannerWeek(childId, weekKey = getWeekKey()) {
+  return STATE.planner[childId]?.[weekKey] || {};
+}
+function ensurePlannerWeek(childId, weekKey = getWeekKey()) {
+  if (!STATE.planner[childId]) STATE.planner[childId] = {};
+  if (!STATE.planner[childId][weekKey]) STATE.planner[childId][weekKey] = {};
+  return STATE.planner[childId][weekKey];
+}
+function getTopicById(grade, topicId) {
+  const subjects = CAPS_CURRICULUM[grade] || {};
+  for (const [subjectName, subjectData] of Object.entries(subjects)) {
+    const topic = (subjectData.topics || []).find(entry => entry.id === topicId);
+    if (topic) return { ...topic, subject: subjectName, color: subjectData.color, icon: subjectData.icon };
+  }
+  return null;
+}
+function getPlannerEntries(childId, grade, dayKey, weekKey = getWeekKey()) {
+  const ids = getPlannerWeek(childId, weekKey)[dayKey] || [];
+  return ids.map(topicId => getTopicById(grade, topicId)).filter(Boolean);
+}
+function getPlannerTopicCount(childId, weekKey = getWeekKey()) {
+  const week = getPlannerWeek(childId, weekKey);
+  return Object.values(week).reduce((sum, entries) => sum + (entries?.length || 0), 0);
+}
+function getAvailablePlannerTopics(childId, grade, limit = 12) {
+  const subjects = CAPS_CURRICULUM[grade] || {};
+  const prog = getProgress(childId);
+  const planned = new Set(Object.values(getPlannerWeek(childId)).flat());
+  const topics = [];
+  Object.entries(subjects).forEach(([subjectName, subjectData]) => {
+    (subjectData.topics || []).forEach(topic => {
+      if (planned.has(topic.id)) return;
+      const state = prog[topic.id] || 0;
+      if (state === 2) return;
+      topics.push({
+        id: topic.id,
+        title: topic.title,
+        section: topic.section,
+        subject: subjectName,
+        icon: subjectData.icon,
+        state,
+      });
+    });
+  });
+  topics.sort((a, b) => a.state - b.state || a.subject.localeCompare(b.subject) || a.title.localeCompare(b.title));
+  return topics.slice(0, limit);
+}
+function addPlannerTopic(childId, weekKey, dayKey, topicId) {
+  const week = ensurePlannerWeek(childId, weekKey);
+  if (!week[dayKey]) week[dayKey] = [];
+  if (!week[dayKey].includes(topicId)) week[dayKey].push(topicId);
+  saveState(STATE);
+}
+function removePlannerTopic(childId, weekKey, dayKey, topicId) {
+  const week = ensurePlannerWeek(childId, weekKey);
+  week[dayKey] = (week[dayKey] || []).filter(entry => entry !== topicId);
+  saveState(STATE);
+}
+function promptPlannerTopic(dayKey) {
+  if (!parentModeUnlocked) return;
+  const ch = getChild();
+  if (!ch) return;
+  const available = getAvailablePlannerTopics(ch.id, ch.grade, 10);
+  if (!available.length) {
+    alert('All unfinished topics are already planned for this week. Complete or remove a planned item to make room.');
+    return;
+  }
+  const options = available.map((topic, index) => `${index + 1}. ${topic.icon} ${topic.subject} - ${topic.title}`).join('\n');
+  const answer = prompt(`Add a topic for ${PLANNER_DAYS.find(day => day.key === dayKey)?.label || dayKey}.\n\nChoose a number:\n${options}`);
+  if (!answer) return;
+  const picked = available[Number(answer) - 1];
+  if (!picked) {
+    alert('Please enter one of the listed numbers.');
+    return;
+  }
+  addPlannerTopic(ch.id, getWeekKey(), dayKey, picked.id);
+  renderDashboard();
+}
+function promptPlannerTopicForWeek() {
+  if (!parentModeUnlocked) return;
+  const dayList = PLANNER_DAYS.map((day, index) => `${index + 1}. ${day.label}`).join('\n');
+  const answer = prompt(`Choose a day for this planned topic:\n${dayList}`);
+  if (!answer) return;
+  const day = PLANNER_DAYS[Number(answer) - 1];
+  if (!day) {
+    alert('Please enter one of the listed day numbers.');
+    return;
+  }
+  promptPlannerTopic(day.key);
+}
+function printWeeklyPlanner() {
+  alert('🗓 Weekly planner\n\nUse your browser print dialog to print or save this week\'s planner.\n\nTip: open parent mode on a desktop browser, then choose File → Print → Save as PDF.');
+  window.print();
+}
+function dropPlannerTopic(dayKey, topicId) {
+  if (!parentModeUnlocked) return;
+  const ch = getChild();
+  if (!ch) return;
+  removePlannerTopic(ch.id, getWeekKey(), dayKey, topicId);
+  renderDashboard();
+}
+function buildPlannerCard(ch) {
+  const weekKey = getWeekKey();
+  const totalPlanned = getPlannerTopicCount(ch.id, weekKey);
+  return `<div class="card">
+    <div class="card-title">Weekly Planner</div>
+    <div class="planner-header">
+      <div>
+        <div class="planner-title">Week of ${formatWeekLabel(weekKey)}</div>
+        <div class="planner-subtitle">${totalPlanned ? `${totalPlanned} topic${totalPlanned === 1 ? '' : 's'} scheduled for ${ch.name}` : `Plan ${ch.name}'s week by assigning topics to each day.`}</div>
+      </div>
+      <div class="planner-actions">
+        <button class="planner-print-btn" onclick="printWeeklyPlanner()">Print week</button>
+        <button class="planner-add-all" onclick="promptPlannerTopicForWeek()">+ Add topic</button>
+      </div>
+    </div>
+    <div class="planner-grid">
+      ${PLANNER_DAYS.map(day => {
+        const entries = getPlannerEntries(ch.id, ch.grade, day.key, weekKey);
+        return `<div class="planner-day">
+          <div class="planner-day-head">
+            <div class="planner-day-label">${day.label}</div>
+            <button class="planner-day-add" onclick="promptPlannerTopic('${day.key}')">+</button>
+          </div>
+          <div class="planner-day-body">
+            ${entries.length ? entries.map(entry => `<div class="planner-item" onclick="openSubject('${entry.subject}')">
+              <div class="planner-item-top">
+                <span class="planner-item-subject" style="color:${entry.color}">${entry.icon} ${entry.subject}</span>
+                <button class="planner-item-remove" onclick="event.stopPropagation();dropPlannerTopic('${day.key}','${entry.id}')">×</button>
+              </div>
+              <div class="planner-item-title">${escapeHtml(entry.title)}</div>
+            </div>`).join('') : `<div class="planner-empty">Nothing planned yet</div>`}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+function getSubjectDoneCount(childId, grade, subject) {
+  const topics = CAPS_CURRICULUM[grade]?.[subject]?.topics || [];
+  const prog = getProgress(childId);
+  return topics.filter(topic => (prog[topic.id] || 0) === 2).length;
+}
+function getSubjectInProgressCount(childId, grade, subject) {
+  const topics = CAPS_CURRICULUM[grade]?.[subject]?.topics || [];
+  const prog = getProgress(childId);
+  return topics.filter(topic => (prog[topic.id] || 0) === 1).length;
+}
+function buildProgressSnapshot(childId, date = toLocalISODate()) {
+  const child = STATE.children.find(entry => entry.id === childId);
+  if (!child) return null;
+
+  const subjects = CAPS_CURRICULUM[child.grade] || {};
+  const subjectProgress = {};
+  let totalDone = 0;
+  let totalInProgress = 0;
+
+  Object.entries(subjects).forEach(([subjectName, subjectData]) => {
+    const done = getSubjectDoneCount(childId, child.grade, subjectName);
+    const inProgress = getSubjectInProgressCount(childId, child.grade, subjectName);
+    totalDone += done;
+    totalInProgress += inProgress;
+    subjectProgress[subjectName] = {
+      done,
+      inProgress,
+      total: (subjectData.topics || []).length,
+    };
+  });
+
+  return {
+    date,
+    grade: child.grade,
+    totalDone,
+    totalInProgress,
+    xp: STATE.xp[childId] || 0,
+    subjectProgress,
+  };
+}
+function recordProgressSnapshot(childId, date = toLocalISODate()) {
+  const snapshot = buildProgressSnapshot(childId, date);
+  if (!snapshot) return;
+  if (!STATE.progressHistory[childId]) STATE.progressHistory[childId] = [];
+  const history = STATE.progressHistory[childId];
+  const existingIndex = history.findIndex(entry => entry.date === date && entry.grade === snapshot.grade);
+  if (existingIndex >= 0) history[existingIndex] = snapshot;
+  else history.push(snapshot);
+  history.sort((a, b) => a.date.localeCompare(b.date));
+}
+function ensureProgressTracking(childId) {
+  const child = STATE.children.find(entry => entry.id === childId);
+  if (!child) return;
+
+  if (!STATE.progressMeta[childId]) STATE.progressMeta[childId] = {};
+  const meta = STATE.progressMeta[childId];
+  const prog = getProgress(childId);
+  let changed = false;
+
+  Object.entries(prog).forEach(([topicId, state]) => {
+    if (!meta[topicId]) meta[topicId] = {};
+    if (state === 2 && !meta[topicId].completedAt) {
+      meta[topicId].completedAt = toLocalISODate();
+      changed = true;
+    }
+    if (state > 0 && !meta[topicId].updatedAt) {
+      meta[topicId].updatedAt = meta[topicId].completedAt || toLocalISODate();
+      changed = true;
+    }
+  });
+
+  recordProgressSnapshot(childId);
+  if (changed) saveState(STATE);
+}
+function getRecentProgressSnapshots(childId, grade, days = 7) {
+  const history = (STATE.progressHistory[childId] || []).filter(entry => entry.grade === grade);
+  const today = fromISODate(toLocalISODate());
+  const byDate = new Map(history.map(entry => [entry.date, entry]));
+  const snapshots = [];
+  let lastKnown = null;
+
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - offset);
+    const key = toLocalISODate(date);
+    const current = byDate.get(key) || lastKnown;
+    if (byDate.has(key)) lastKnown = byDate.get(key);
+    snapshots.push(current ? { ...current, date: key } : {
+      date: key,
+      grade,
+      totalDone: 0,
+      totalInProgress: 0,
+      xp: 0,
+      subjectProgress: {},
+    });
+  }
+
+  return snapshots;
+}
+function renderTrendSvg(points, color) {
+  const width = 220;
+  const height = 72;
+  const padding = 8;
+  const maxValue = Math.max(...points.map(point => point.value), 1);
+  const path = points.map((point, index) => {
+    const x = padding + (index * (width - padding * 2)) / Math.max(points.length - 1, 1);
+    const y = height - padding - ((point.value / maxValue) * (height - padding * 2));
+    return `${index === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).join(' ');
+  const area = `${path} L${(width - padding).toFixed(1)} ${(height - padding).toFixed(1)} L${padding} ${(height - padding).toFixed(1)} Z`;
+
+  return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="72" aria-hidden="true">
+    <path d="${area}" fill="${color}" opacity="0.12"></path>
+    <path d="${path}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
+    ${points.map((point, index) => {
+      const x = padding + (index * (width - padding * 2)) / Math.max(points.length - 1, 1);
+      const y = height - padding - ((point.value / maxValue) * (height - padding * 2));
+      return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.5" fill="${color}"></circle>`;
+    }).join('')}
+  </svg>`;
+}
 function getMilestoneUnlocks(childId) {
   const xp = STATE.xp[childId] || 0;
   return [100, 250, 500, 1000].filter(threshold => xp >= threshold);
@@ -161,8 +476,16 @@ function getWeatherState(childId) {
 
 function setTopicState(childId, topicId, val) {
   if (!STATE.progress[childId]) STATE.progress[childId] = {};
+  if (!STATE.progressMeta[childId]) STATE.progressMeta[childId] = {};
   const old = STATE.progress[childId][topicId] || 0;
+  const meta = STATE.progressMeta[childId][topicId] || {};
   STATE.progress[childId][topicId] = val;
+  meta.updatedAt = toLocalISODate();
+  if (val === 2) meta.completedAt = meta.completedAt || toLocalISODate();
+  else delete meta.completedAt;
+  if (val > 0 || Object.keys(meta).length) STATE.progressMeta[childId][topicId] = meta;
+  else delete STATE.progressMeta[childId][topicId];
+  recordProgressSnapshot(childId);
   saveState(STATE);
   if (val > old && val === 2) awardXP(childId, 10, topicId);
   updateHUD();
@@ -218,8 +541,8 @@ function selectChild(id) {
 function addChild() {
   const name = prompt('Child\'s name?');
   if (!name) return;
-  const grade = parseInt(prompt('Grade? (4, 5, 6, or 7)'));
-  if (![4,5,6,7].includes(grade)) { alert('Grade must be 4–7'); return; }
+  const grade = parseInt(prompt('Grade? (1, 2, 3, 4, 5, 6, or 7)'));
+  if (![1,2,3,4,5,6,7].includes(grade)) { alert('Grade must be 1–7'); return; }
   const initials = name.substring(0,2).toUpperCase();
   const colors = ['#2d6a4f','#1d6fa4','#6b4fbb','#e9961a','#c0392b'];
   const col = colors[STATE.children.length % colors.length];
@@ -234,6 +557,7 @@ function addChild() {
     carSetupDone: false,
   };
   STATE.children.push(ch);
+  ensureProgressTracking(ch.id);
   saveState(STATE);
   renderIntro();
   selectChild(ch.id);
@@ -380,11 +704,12 @@ function openSubject(subjectName) {
 function renderSubject(name, sub, ch) {
   const body = document.getElementById('lms-body');
   const prog = getProgress(ch.id);
+  const notes = getNotes(ch.id);
   const topics = sub.topics;
   const done = topics.filter(t => (prog[t.id]||0) === 2).length;
-  const inProg = topics.filter(t => (prog[t.id]||0) === 1).length;
   const pct = Math.round((done/topics.length)*100);
   const xp = STATE.xp[ch.id] || 0;
+  const noteCount = countTopicNotes(ch.id, ch.grade, name);
 
   let html = `
     <div class="progress-header slide-up">
@@ -395,6 +720,7 @@ function renderSubject(name, sub, ch) {
         <div class="progress-bar-wrap">
           <div class="progress-bar-fill" style="width:${pct}%;background:${sub.color}"></div>
         </div>
+        ${parentModeUnlocked ? `<div class="subject-note-summary">📝 ${noteCount} parent note${noteCount === 1 ? '' : 's'} saved for this subject</div>` : ''}
       </div>
       <div class="xp-badge">⭐ ${xp} XP</div>
     </div>`;
@@ -411,6 +737,7 @@ function renderSubject(name, sub, ch) {
     html += `<div class="section-label">${sec} <span style="font-weight:400;opacity:.7">(${secDone}/${ts.length})</span></div>`;
     ts.forEach(t => {
       const state = prog[t.id] || 0;
+      const note = notes[t.id] || '';
       const stateClass = state === 2 ? 'done' : state === 1 ? 'partial' : '';
       const checkClass = state === 2 ? 'done' : state === 1 ? 'partial' : '';
       const checkIcon = state === 2 ? '✓' : state === 1 ? '◆' : '';
@@ -420,7 +747,11 @@ function renderSubject(name, sub, ch) {
       html += `
         <div class="topic-row ${stateClass} slide-up" onclick="cycleTopic('${t.id}', this)">
           <div class="topic-check ${checkClass}">${checkIcon}</div>
-          <div class="topic-title ${titleClass}">${t.title}</div>
+          <div class="topic-main">
+            <div class="topic-title ${titleClass}">${t.title}</div>
+            ${parentModeUnlocked ? `<div class="topic-note-preview${note ? ' has-note' : ''}">${note ? '📝 ' + escapeHtml(note) : 'No parent note yet'}</div>` : ''}
+          </div>
+          ${parentModeUnlocked ? `<button class="topic-note-btn${note ? ' has-note' : ''}" onclick="event.stopPropagation();openTopicNote('${t.id}')">${note ? 'Edit note' : 'Add note'}</button>` : ''}
           <span class="topic-status ${statusClass}">${statusText}</span>
         </div>`;
     });
@@ -479,9 +810,16 @@ function cycleTopic(topicId, rowEl) {
 function renderDashboard() {
   const ch = getChild();
   if (!ch) return;
+  ensureProgressTracking(ch.id);
   const { total, done } = calcTotals(ch.id, ch.grade);
   const xp = STATE.xp[ch.id] || 0;
   const subjects = CAPS_CURRICULUM[ch.grade] || {};
+  const noteCount = countTopicNotes(ch.id, ch.grade);
+  const trendSnapshots = getRecentProgressSnapshots(ch.id, ch.grade, 7);
+  const trendPoints = trendSnapshots.map(entry => ({ date: entry.date, value: entry.totalDone }));
+  const trendDelta = trendPoints.length > 1 ? trendPoints[trendPoints.length - 1].value - trendPoints[0].value : 0;
+  const trendStart = trendPoints[0]?.date || toLocalISODate();
+  const trendEnd = trendPoints[trendPoints.length - 1]?.date || toLocalISODate();
 
   let html = `
     <div class="dash-hello">Good day, ${ch.name}! 🌤</div>
@@ -526,6 +864,62 @@ function renderDashboard() {
       </div>`;
   });
   html += `</div>
+
+  <div class="card">
+    <div class="card-title">Progress Trend · Last 7 days</div>
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:18px;align-items:center">
+      <div>
+        ${renderTrendSvg(trendPoints, '#2d6a4f')}
+        <div style="display:flex;justify-content:space-between;font-family:sans-serif;font-size:11px;color:var(--text3);margin-top:6px">
+          <span>${trendStart}</span>
+          <span>${trendEnd}</span>
+        </div>
+      </div>
+      <div style="display:grid;gap:10px">
+        <div style="background:var(--surface2);border-radius:12px;padding:12px">
+          <div style="font-family:sans-serif;font-size:11px;color:var(--text3);margin-bottom:4px">Topics completed</div>
+          <div style="font-size:26px;font-weight:700;color:var(--green)">${done}</div>
+        </div>
+        <div style="background:${trendDelta >= 0 ? 'var(--green-bg)' : 'var(--amber-bg)'};border-radius:12px;padding:12px">
+          <div style="font-family:sans-serif;font-size:11px;color:var(--text3);margin-bottom:4px">7-day movement</div>
+          <div style="font-size:22px;font-weight:700;color:${trendDelta >= 0 ? 'var(--green)' : 'var(--amber)'}">${trendDelta >= 0 ? '+' : ''}${trendDelta}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Subject Trends</div>`;
+
+  Object.entries(subjects).forEach(([name, sub]) => {
+    const subjectTrend = trendSnapshots.map(entry => ({
+      date: entry.date,
+      value: entry.subjectProgress?.[name]?.done || 0,
+    }));
+    const latest = subjectTrend[subjectTrend.length - 1]?.value || 0;
+    const previous = subjectTrend[0]?.value || 0;
+    const delta = latest - previous;
+    html += `
+      <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(120px,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+        <div>
+          <div style="font-family:sans-serif;font-size:13px;font-weight:700;color:var(--text)">${sub.icon} ${name}</div>
+          <div style="font-family:sans-serif;font-size:11px;color:var(--text3)">${latest}/${sub.topics.length} topics done this week view</div>
+        </div>
+        <div>${renderTrendSvg(subjectTrend, sub.color)}</div>
+        <div style="font-family:sans-serif;font-size:12px;font-weight:700;color:${delta >= 0 ? 'var(--green)' : 'var(--amber)'};min-width:42px;text-align:right">${delta >= 0 ? '+' : ''}${delta}</div>
+      </div>`;
+  });
+
+  html += `</div>
+
+  ${parentModeUnlocked ? buildPlannerCard(ch) : ''}
+
+  ${parentModeUnlocked ? `<div class="card">
+    <div class="card-title">Parent Notes</div>
+    <div style="font-family:sans-serif;font-size:14px;color:var(--text2);line-height:1.7">
+      ${noteCount ? `📝 ${noteCount} topic note${noteCount === 1 ? '' : 's'} saved for ${ch.name}. Open any subject to review or update annotations.` : `No topic notes saved yet. Open a subject and use “Add note” beside a topic to record resources, dates, or observations.`}
+    </div>
+  </div>` : ''}
 
   <div class="card">
     <div class="card-title">Quick Actions</div>
@@ -612,7 +1006,7 @@ function addPortfolioItem() {
 }
 
 function exportPortfolio() {
-  alert('📄 Portfolio export\n\nThis will generate a PDF with:\n• Child profile & grade\n• All portfolio items with dates\n• CAPS curriculum progress per subject\n• Learning log entries\n\nFor full PDF generation, open in a desktop browser and use File → Print → Save as PDF.');
+  alert('📄 Portfolio export\n\nThis will generate a PDF with:\n• Child profile & grade\n• All portfolio items with dates\n• CAPS curriculum progress per subject\n• Topic annotations / parent notes\n• Learning log entries\n\nFor full PDF generation, open in a desktop browser and use File → Print → Save as PDF.');
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -750,6 +1144,23 @@ function closeModalOutside(e, id) {
     resetParentPin();
     pendingParentAction = null;
   }
+}
+
+function openTopicNote(topicId) {
+  if (!parentModeUnlocked) return;
+  const ch = getChild();
+  if (!ch) return;
+  const subject = CAPS_CURRICULUM[ch.grade]?.[activeSubject];
+  const topic = subject?.topics?.find(entry => entry.id === topicId);
+  if (!topic) return;
+
+  const existing = getTopicNote(ch.id, topicId);
+  const next = prompt('Parent note for "' + topic.title + '"', existing);
+  if (next === null) return;
+  const trimmed = next.trim();
+  if (!trimmed && existing && !confirm('Remove this parent note?')) return;
+  setTopicNote(ch.id, topicId, trimmed);
+  renderSubject(activeSubject, subject, ch);
 }
 
 function promptParentAccess(action) {
@@ -1085,6 +1496,8 @@ function importData() {
 
 function resetProgress() {
   STATE.progress = {};
+  STATE.progressMeta = {};
+  STATE.progressHistory = {};
   STATE.xp = {};
   saveState(STATE);
   closeModal('settings');
@@ -1096,7 +1509,7 @@ function resetProgress() {
    SERVICE WORKER REGISTRATION
 ════════════════════════════════════════════════════════ */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js?v=6', { updateViaCache: 'none' }).catch(() => {});
+  navigator.serviceWorker.register('./sw.js?v=10', { updateViaCache: 'none' }).catch(() => {});
 }
 
 window.addEventListener('beforeinstallprompt', e => {
@@ -1143,6 +1556,7 @@ document.addEventListener('keydown', e => {
    BOOT
 ════════════════════════════════════════════════════════ */
 renderIntro();
+STATE.children.forEach(child => ensureProgressTracking(child.id));
 if (STATE.children.length) {
   const preferredChildId = getPreferredChildId();
   if (preferredChildId) {

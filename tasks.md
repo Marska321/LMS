@@ -61,10 +61,10 @@ Goal from source: complete Foundation Phase curriculum coverage and make the par
 
 | ID | Task | Status | Repo-aware note |
 | --- | --- | --- | --- |
-| T2.1 | Expand Foundation Phase curriculum for Grades 1-3 | `Todo` | [data/curriculum.js](/C:/Users/User/LMS/data/curriculum.js) currently focuses on higher grades; the full Gr 1-3 CAPS expansion is still needed. |
-| T2.2 | Progress trend chart | `Todo` | No charting is present in the learner app or parent dashboard, and no completed-at migration exists yet for historical progress graphing. |
-| T2.3 | Topic annotations / parent notes | `Todo` | There is no notes schema or inline note UI in the curriculum experience yet. |
-| T2.4 | Weekly planner view | `Todo` | Planner behavior and planner state are not implemented in the current app or parent dashboard. |
+| T2.1 | Expand Foundation Phase curriculum for Grades 1-3 | `Done` | Implemented in [data/curriculum.js](/C:/Users/User/LMS/data/curriculum.js) with Grade 1-3 coverage added across the six in-app subject tracks so Foundation Phase learners can use the existing world and dashboard flow. |
+| T2.2 | Progress trend chart | `Done` | Implemented in [js/app.js](/C:/Users/User/LMS/js/app.js) with per-child progress metadata/history snapshots, legacy-state backfill, a 7-day dashboard trend chart, and subject-level mini trends for parent review. |
+| T2.3 | Topic annotations / parent notes | `Done` | Implemented in [js/app.js](/C:/Users/User/LMS/js/app.js) and [css/app.css](/C:/Users/User/LMS/css/app.css) with per-topic parent-only notes stored in app state, inline subject-level note controls, and dashboard/export surfacing for inspection context. |
+| T2.4 | Weekly planner view | `Done` | Implemented in [js/app.js](/C:/Users/User/LMS/js/app.js) and [css/app.css](/C:/Users/User/LMS/css/app.css) with parent-mode weekly planning state, per-day topic assignment/removal, and a printable planner card on the main dashboard. |
 | T2.5 | CAPS inspection report card PDF | `Partial` | Portfolio export messaging exists, but the structured report card generation described here is not implemented. |
 
 ## Sprint 3 - Maths Arcade Bridge

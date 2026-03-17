@@ -1,4 +1,230 @@
 const CAPS_CURRICULUM = {
+  1: {
+    Mathematics: {
+      color: '#2d6a4f', icon: '📐', xp: 10,
+      topics: [
+        { id:'m1-1', section:'Numbers, Operations & Relationships', title:'Count, read and write numbers 0-100' },
+        { id:'m1-2', section:'Numbers, Operations & Relationships', title:'Compare, order and sequence numbers up to 100' },
+        { id:'m1-3', section:'Numbers, Operations & Relationships', title:'Place value: tens and ones' },
+        { id:'m1-4', section:'Numbers, Operations & Relationships', title:'Addition and subtraction within 20' },
+        { id:'m1-5', section:'Numbers, Operations & Relationships', title:'Mental maths bonds and doubles' },
+        { id:'m1-6', section:'Patterns, Functions & Algebra', title:'Copy, extend and describe simple number patterns' },
+        { id:'m1-7', section:'Patterns, Functions & Algebra', title:'Create repeating patterns with objects and pictures' },
+        { id:'m1-8', section:'Space & Shape', title:'Identify and sort 2D shapes in everyday life' },
+        { id:'m1-9', section:'Space & Shape', title:'Identify and describe common 3D objects' },
+        { id:'m1-10', section:'Measurement', title:'Compare length, mass, capacity and time informally' },
+        { id:'m1-11', section:'Measurement', title:'Tell time to the hour and order daily events' },
+        { id:'m1-12', section:'Data Handling', title:'Collect, sort and represent data with objects or pictures' },
+      ]
+    },
+    'English HL': {
+      color: '#1d6fa4', icon: '📚', xp: 10,
+      topics: [
+        { id:'e1-1', section:'Listening & Speaking', title:'Listen attentively and respond to simple questions' },
+        { id:'e1-2', section:'Listening & Speaking', title:'Follow oral instructions and retell a short story' },
+        { id:'e1-3', section:'Phonics & Word Recognition', title:'Recognise letter sounds and common sight words' },
+        { id:'e1-4', section:'Reading & Viewing', title:'Read simple words and sentences with picture support' },
+        { id:'e1-5', section:'Reading & Viewing', title:'Talk about characters, events and setting in a story' },
+        { id:'e1-6', section:'Writing & Presenting', title:'Form letters correctly and write simple words' },
+        { id:'e1-7', section:'Writing & Presenting', title:'Write short captions and basic sentences' },
+        { id:'e1-8', section:'Language Structures', title:'Use nouns, verbs and basic punctuation in context' },
+      ]
+    },
+    'Natural Sciences': {
+      color: '#6b4fbb', icon: '🔬', xp: 10,
+      topics: [
+        { id:'s1-1', section:'Living Things', title:'Observe living and non-living things' },
+        { id:'s1-2', section:'Living Things', title:'Identify needs of plants and animals' },
+        { id:'s1-3', section:'Body Awareness', title:'Name body parts and their basic functions' },
+        { id:'s1-4', section:'Senses', title:'Use the five senses to explore the world' },
+        { id:'s1-5', section:'Weather & Environment', title:'Observe daily weather and seasonal changes' },
+        { id:'s1-6', section:'Materials & Energy', title:'Explore properties of everyday materials' },
+      ]
+    },
+    'Social Sciences': {
+      color: '#e9961a', icon: '🌍', xp: 10,
+      topics: [
+        { id:'ss1-1', section:'My World', title:'Know my home, school and classroom spaces' },
+        { id:'ss1-2', section:'My World', title:'Understand rules, routines and responsibilities' },
+        { id:'ss1-3', section:'Places & Maps', title:'Use simple position words and directions' },
+        { id:'ss1-4', section:'Places & Maps', title:'Draw a simple picture map of a familiar place' },
+        { id:'ss1-5', section:'Family & Time', title:'Talk about family members and special events' },
+        { id:'ss1-6', section:'Family & Time', title:'Sequence yesterday, today and tomorrow' },
+      ]
+    },
+    'Afrikaans FAL': {
+      color: '#c0392b', icon: '🌿', xp: 10,
+      topics: [
+        { id:'a1-1', section:'Luister & Praat', title:'Luister na eenvoudige instruksies en reageer gepas' },
+        { id:'a1-2', section:'Luister & Praat', title:'Gebruik basiese groete en alledaagse frases' },
+        { id:'a1-3', section:'Klanke & Woordeskat', title:'Herken alfabetklanke en kernwoordeskat' },
+        { id:'a1-4', section:'Lees & Kyk', title:'Lees eenvoudige woorde met prentondersteuning' },
+        { id:'a1-5', section:'Skryf & Aanbied', title:'Skryf letters, name en eenvoudige woorde' },
+        { id:'a1-6', section:'Taalstrukture', title:'Gebruik selfstandige naamwoorde en werkwoorde in eenvoudige sinne' },
+      ]
+    },
+    'Life Skills': {
+      color: '#1a9e8a', icon: '⭐', xp: 10,
+      topics: [
+        { id:'ls1-1', section:'Beginning Knowledge', title:'Learn about myself, my family and my community' },
+        { id:'ls1-2', section:'Personal & Social Well-being', title:'Healthy habits, safety and caring for others' },
+        { id:'ls1-3', section:'Creative Arts', title:'Explore colour, rhythm, movement and role play' },
+        { id:'ls1-4', section:'Physical Education', title:'Develop balance, coordination and movement skills' },
+        { id:'ls1-5', section:'Beginning Knowledge', title:'Notice weather, animals, transport and daily life around me' },
+        { id:'ls1-6', section:'Personal & Social Well-being', title:'Understand feelings and simple conflict resolution' },
+      ]
+    }
+  },
+  2: {
+    Mathematics: {
+      color: '#2d6a4f', icon: '📐', xp: 10,
+      topics: [
+        { id:'m2-1', section:'Numbers, Operations & Relationships', title:'Count, read and write numbers 0-200' },
+        { id:'m2-2', section:'Numbers, Operations & Relationships', title:'Place value: hundreds, tens and ones' },
+        { id:'m2-3', section:'Numbers, Operations & Relationships', title:'Addition and subtraction up to 99' },
+        { id:'m2-4', section:'Numbers, Operations & Relationships', title:'Solve simple multiplication and sharing problems' },
+        { id:'m2-5', section:'Patterns, Functions & Algebra', title:'Recognise, extend and explain numeric patterns' },
+        { id:'m2-6', section:'Patterns, Functions & Algebra', title:'Describe repeating patterns with shapes and objects' },
+        { id:'m2-7', section:'Space & Shape', title:'Describe 2D shapes by sides and corners' },
+        { id:'m2-8', section:'Space & Shape', title:'Describe 3D objects by faces and surfaces' },
+        { id:'m2-9', section:'Measurement', title:'Measure length using informal and standard units' },
+        { id:'m2-10', section:'Measurement', title:'Work with money, calendars and time to half-hour' },
+        { id:'m2-11', section:'Data Handling', title:'Represent and answer questions from simple graphs' },
+      ]
+    },
+    'English HL': {
+      color: '#1d6fa4', icon: '📚', xp: 10,
+      topics: [
+        { id:'e2-1', section:'Listening & Speaking', title:'Listen for detail and retell stories in sequence' },
+        { id:'e2-2', section:'Listening & Speaking', title:'Give short oral descriptions and news' },
+        { id:'e2-3', section:'Phonics & Word Recognition', title:'Blend sounds, decode words and use sight vocabulary' },
+        { id:'e2-4', section:'Reading & Viewing', title:'Read short texts with growing fluency' },
+        { id:'e2-5', section:'Reading & Viewing', title:'Answer literal questions about stories and information texts' },
+        { id:'e2-6', section:'Writing & Presenting', title:'Write sentences and short paragraphs with support' },
+        { id:'e2-7', section:'Writing & Presenting', title:'Use process writing: plan, write, edit' },
+        { id:'e2-8', section:'Language Structures', title:'Use punctuation, tenses and vocabulary in simple contexts' },
+      ]
+    },
+    'Natural Sciences': {
+      color: '#6b4fbb', icon: '🔬', xp: 10,
+      topics: [
+        { id:'s2-1', section:'Living Things', title:'Classify plants and animals by observable features' },
+        { id:'s2-2', section:'Living Things', title:'Describe habitats and basic life needs' },
+        { id:'s2-3', section:'Body Awareness', title:'Healthy eating, exercise and body care' },
+        { id:'s2-4', section:'Weather & Environment', title:'Record weather patterns and changes over time' },
+        { id:'s2-5', section:'Materials & Energy', title:'Compare materials by texture, strength and use' },
+        { id:'s2-6', section:'Technology Awareness', title:'Explore simple tools, structures and how things work' },
+      ]
+    },
+    'Social Sciences': {
+      color: '#e9961a', icon: '🌍', xp: 10,
+      topics: [
+        { id:'ss2-1', section:'Community', title:'Identify important people and places in the community' },
+        { id:'ss2-2', section:'Community', title:'Understand services like shops, clinics and transport' },
+        { id:'ss2-3', section:'Places & Maps', title:'Use symbols and keys on simple maps' },
+        { id:'ss2-4', section:'Places & Maps', title:'Describe routes and directions in familiar spaces' },
+        { id:'ss2-5', section:'History & Time', title:'Sequence personal and family events on a simple timeline' },
+        { id:'ss2-6', section:'History & Time', title:'Compare life now and long ago' },
+      ]
+    },
+    'Afrikaans FAL': {
+      color: '#c0392b', icon: '🌿', xp: 10,
+      topics: [
+        { id:'a2-1', section:'Luister & Praat', title:'Luister vir detail en praat oor bekende onderwerpe' },
+        { id:'a2-2', section:'Luister & Praat', title:'Gebruik eenvoudige sinne in gesprekke en nuus' },
+        { id:'a2-3', section:'Klanke & Woordeskat', title:'Lees klanke saam en bou woordeskat uit' },
+        { id:'a2-4', section:'Lees & Kyk', title:'Lees kort sinne en eenvoudige tekste met begrip' },
+        { id:'a2-5', section:'Skryf & Aanbied', title:'Skryf sinne en kort paragrawe met ondersteuning' },
+        { id:'a2-6', section:'Taalstrukture', title:'Gebruik leestekens, tydsvorme en basiese sinsbou' },
+      ]
+    },
+    'Life Skills': {
+      color: '#1a9e8a', icon: '⭐', xp: 10,
+      topics: [
+        { id:'ls2-1', section:'Beginning Knowledge', title:'Explore seasons, transport, animals and local places' },
+        { id:'ls2-2', section:'Personal & Social Well-being', title:'Build self-esteem, empathy and personal safety skills' },
+        { id:'ls2-3', section:'Creative Arts', title:'Create art, music and movement patterns' },
+        { id:'ls2-4', section:'Physical Education', title:'Develop locomotor, ball and spatial skills' },
+        { id:'ls2-5', section:'Beginning Knowledge', title:'Learn about resources, water and caring for the environment' },
+        { id:'ls2-6', section:'Personal & Social Well-being', title:'Practise teamwork and solving everyday problems' },
+      ]
+    }
+  },
+  3: {
+    Mathematics: {
+      color: '#2d6a4f', icon: '📐', xp: 10,
+      topics: [
+        { id:'m3-1', section:'Numbers, Operations & Relationships', title:'Count, read and write numbers 0-1000' },
+        { id:'m3-2', section:'Numbers, Operations & Relationships', title:'Place value, compare and order numbers to 1000' },
+        { id:'m3-3', section:'Numbers, Operations & Relationships', title:'Addition and subtraction up to 3-digit numbers' },
+        { id:'m3-4', section:'Numbers, Operations & Relationships', title:'Multiplication and division facts in everyday contexts' },
+        { id:'m3-5', section:'Numbers, Operations & Relationships', title:'Fractions: halves, thirds, quarters and fifths' },
+        { id:'m3-6', section:'Patterns, Functions & Algebra', title:'Investigate number sentences and patterns' },
+        { id:'m3-7', section:'Space & Shape', title:'Describe, compare and draw 2D shapes and 3D objects' },
+        { id:'m3-8', section:'Measurement', title:'Measure perimeter, length, mass, capacity and time' },
+        { id:'m3-9', section:'Measurement', title:'Use calendars, clocks and money in practical problems' },
+        { id:'m3-10', section:'Data Handling', title:'Collect, represent and interpret data in tables and graphs' },
+      ]
+    },
+    'English HL': {
+      color: '#1d6fa4', icon: '📚', xp: 10,
+      topics: [
+        { id:'e3-1', section:'Listening & Speaking', title:'Listen for key ideas and speak confidently about familiar topics' },
+        { id:'e3-2', section:'Listening & Speaking', title:'Give short prepared oral presentations and retell events clearly' },
+        { id:'e3-3', section:'Reading & Viewing', title:'Read short stories and information texts with fluency' },
+        { id:'e3-4', section:'Reading & Viewing', title:'Answer literal and simple inferential comprehension questions' },
+        { id:'e3-5', section:'Reading & Viewing', title:'Use reading strategies and discuss story elements' },
+        { id:'e3-6', section:'Writing & Presenting', title:'Write paragraphs, descriptions and short narratives' },
+        { id:'e3-7', section:'Writing & Presenting', title:'Write instructions, messages and simple factual texts' },
+        { id:'e3-8', section:'Language Structures', title:'Apply grammar, punctuation, spelling and vocabulary in writing' },
+      ]
+    },
+    'Natural Sciences': {
+      color: '#6b4fbb', icon: '🔬', xp: 10,
+      topics: [
+        { id:'s3-1', section:'Living Things', title:'Compare plant and animal life cycles and needs' },
+        { id:'s3-2', section:'Living Things', title:'Understand food, farming and where food comes from' },
+        { id:'s3-3', section:'Human Body & Health', title:'Explore body systems, hygiene and healthy habits' },
+        { id:'s3-4', section:'Weather & Earth', title:'Observe weather, seasons and water in the environment' },
+        { id:'s3-5', section:'Materials & Energy', title:'Investigate materials, forces and simple energy sources' },
+        { id:'s3-6', section:'Technology Awareness', title:'Design and make simple structures or products' },
+      ]
+    },
+    'Social Sciences': {
+      color: '#e9961a', icon: '🌍', xp: 10,
+      topics: [
+        { id:'ss3-1', section:'Geography', title:'Read and draw simple maps using symbols, keys and directions' },
+        { id:'ss3-2', section:'Geography', title:'Identify natural and human-made features in local environments' },
+        { id:'ss3-3', section:'Geography', title:'Understand transport, resources and how people use places' },
+        { id:'ss3-4', section:'History', title:'Place events in order using timelines and historical language' },
+        { id:'ss3-5', section:'History', title:'Compare daily life in the past and present' },
+        { id:'ss3-6', section:'History', title:'Learn about local heritage, leaders and community stories' },
+      ]
+    },
+    'Afrikaans FAL': {
+      color: '#c0392b', icon: '🌿', xp: 10,
+      topics: [
+        { id:'a3-1', section:'Luister & Praat', title:'Luister met begrip en praat in eenvoudige volledige sinne' },
+        { id:'a3-2', section:'Luister & Praat', title:'Lewer kort mondelinge aanbiedings oor bekende onderwerpe' },
+        { id:'a3-3', section:'Lees & Kyk', title:'Lees stories en informatiewe tekste met groeiende vlotheid' },
+        { id:'a3-4', section:'Lees & Kyk', title:'Beantwoord letterlike en eenvoudige afleidingsvrae' },
+        { id:'a3-5', section:'Skryf & Aanbied', title:'Skryf sinne, paragrawe en eenvoudige verhaaltjies' },
+        { id:'a3-6', section:'Skryf & Aanbied', title:'Skryf boodskappe, instruksies en beskrywings' },
+        { id:'a3-7', section:'Taalstrukture', title:'Gebruik grammatika, spelling en leestekens in konteks' },
+      ]
+    },
+    'Life Skills': {
+      color: '#1a9e8a', icon: '⭐', xp: 10,
+      topics: [
+        { id:'ls3-1', section:'Beginning Knowledge', title:'Learn about communities, environment, food and water' },
+        { id:'ls3-2', section:'Personal & Social Well-being', title:'Build responsibility, resilience and healthy relationships' },
+        { id:'ls3-3', section:'Creative Arts', title:'Use visual art, music, drama and dance to express ideas' },
+        { id:'ls3-4', section:'Physical Education', title:'Improve coordination, fitness and game skills' },
+        { id:'ls3-5', section:'Beginning Knowledge', title:'Explore South African symbols, heritage and community roles' },
+        { id:'ls3-6', section:'Personal & Social Well-being', title:'Practise safety, decision-making and caring for others' },
+      ]
+    }
+  },
   4: {
     Mathematics: {
       color: '#2d6a4f', icon: '📐', xp: 10,

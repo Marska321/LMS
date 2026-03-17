@@ -7,7 +7,7 @@ A gamified, private, offline-first homeschool LMS for South African families usi
 ## ✨ Features
 
 - **3D Driving World** — child drives a car around a campus, pulls up to subject buildings to enter
-- **Full CAPS Curriculum** — Grades 4–7, all subjects, all topics listed flat (no terms — progress-based)
+- **Full CAPS Curriculum** — Grades 1–7, all subjects, all topics listed flat (no terms — progress-based)
 - **Topic tracking** — tap to cycle: Not Started → In Progress → Done, with XP rewards
 - **Portfolio** — add photos, worksheets, projects; export PDF for inspection
 - **Learning Log** — daily journal entries that build your inspection record
@@ -85,8 +85,8 @@ homeschool-lms/
 
 - Mathematics
 - English Home Language
-- Natural Sciences & Technology
-- Social Sciences (History & Geography)
+- Natural Sciences
+- Social Sciences
 - Afrikaans First Additional Language
 - Life Skills
 
