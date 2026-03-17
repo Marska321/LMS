@@ -194,6 +194,20 @@ html,body{height:100%;overflow:hidden;font-family:'Georgia',serif;background:#1a
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:16px;margin-bottom:14px}
 .card-title{font-family:sans-serif;font-size:11px;font-weight:700;
   letter-spacing:.5px;color:var(--text3);text-transform:uppercase;margin-bottom:12px}
+.challenge-card{background:linear-gradient(135deg,#fff8e8 0%,#fff 100%);border-color:rgba(255,140,66,.22)}
+.challenge-complete{background:linear-gradient(135deg,#eef8f0 0%,#fff 100%);border-color:rgba(45,106,79,.2)}
+.challenge-head{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center}
+.challenge-icon{width:54px;height:54px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;box-shadow:var(--sh)}
+.challenge-title{font-size:18px;font-weight:700;color:var(--text);letter-spacing:-.35px}
+.challenge-sub{font-family:sans-serif;font-size:12px;color:var(--text3);margin-top:4px;line-height:1.5}
+.challenge-bonus{background:#fff4db;color:#d97706;border-radius:999px;padding:7px 10px;font-family:sans-serif;font-size:11px;font-weight:700;white-space:nowrap}
+.challenge-body{font-family:sans-serif;font-size:13px;color:var(--text2);line-height:1.65;margin-top:14px}
+.challenge-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.challenge-btn,.challenge-link{border-radius:11px;padding:10px 14px;font-family:sans-serif;font-size:13px;font-weight:700;cursor:pointer}
+.challenge-btn{border:none;background:#ff8c42;color:#fff}
+.challenge-btn:hover{background:#f17624}
+.challenge-link{border:1px solid var(--border);background:var(--surface);color:var(--text2)}
+.challenge-link:hover{border-color:#ff8c42;color:#ff8c42}
 .planner-header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:14px}
 .planner-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .planner-title{font-size:18px;font-weight:700;color:var(--text);letter-spacing:-.3px}
@@ -238,6 +252,7 @@ html,body{height:100%;overflow:hidden;font-family:'Georgia',serif;background:#1a
 .arcade-desc{font-family:sans-serif;font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:12px}
 .arcade-chip-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
 .arcade-chip{background:var(--surface2);color:var(--text2);border-radius:999px;padding:4px 8px;font-family:sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.35px}
+.arcade-chip-challenge{background:#fff1e8;color:#f17624}
 .arcade-topic-list{display:grid;gap:8px;margin-bottom:14px}
 .arcade-topic{background:#fffaf0;border:1px solid rgba(0,0,0,.06);border-radius:12px;padding:9px 10px;font-family:sans-serif;font-size:12px;color:var(--text);line-height:1.5}
 .arcade-launch-btn{width:100%;border:none;border-radius:12px;padding:12px 14px;background:#ff8c42;color:#fff;font-family:sans-serif;font-size:13px;font-weight:700;cursor:pointer}
@@ -358,6 +373,8 @@ html,body{height:100%;overflow:hidden;font-family:'Georgia',serif;background:#1a
   .hud-controls{display:none}
   .intro-title{font-size:26px}
   .child-card{padding:16px 20px;min-width:120px}
+  .challenge-head{grid-template-columns:auto 1fr}
+  .challenge-bonus{grid-column:1 / -1;justify-self:start}
   .planner-grid{grid-template-columns:1fr}
   .planner-header{flex-direction:column}
   .arcade-grid{grid-template-columns:1fr}

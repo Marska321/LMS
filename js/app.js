@@ -7,6 +7,11 @@ const DEFAULT_CHILDREN = [
 ];
 const CAR_COLOR_OPTIONS = ['#FF4444','#4488FF','#44BB44','#FFAA00','#AA44FF','#FF88AA','#44DDDD','#FFEE44'];
 const DEFAULT_CAR_NAME = 'Road Runner';
+const HOME_STYLE_OPTIONS = [
+  { id:'cottage', label:'Cottage' },
+  { id:'modern', label:'Modern' },
+  { id:'farmhouse', label:'Farmhouse' },
+];
 
 function loadState() {
   try { return JSON.parse(localStorage.getItem('hs-state')) || {}; } catch{ return {}; }
@@ -23,6 +28,7 @@ if (!STATE.portfolio) STATE.portfolio = {};  // { childId: [] }
 if (!STATE.log) STATE.log = {};              // { childId: [] }
 if (!STATE.notes) STATE.notes = {};          // { childId: { topicId: string } }
 if (!STATE.planner) STATE.planner = {};      // { childId: { [weekKey]: { monday: topicId[] ... } } }
+if (!STATE.dailyChallenge) STATE.dailyChallenge = {}; // { childId: { [date]: { gameId, topicId, completedAt?, bonusXp } } }
 if (!STATE.arcadeOrigins) STATE.arcadeOrigins = [window.location.origin, 'http://127.0.0.1:8080', 'http://localhost:8080'];
 if (!STATE.pin) STATE.pin = '1234';
 if (!STATE.milestones) STATE.milestones = {};
@@ -30,6 +36,7 @@ STATE.children = STATE.children.map((child, index) => ({
   ...child,
   carColor: child.carColor || child.color || CAR_COLOR_OPTIONS[index % CAR_COLOR_OPTIONS.length],
   carName: child.carName || DEFAULT_CAR_NAME,
+  homeStyle: child.homeStyle || HOME_STYLE_OPTIONS[index % HOME_STYLE_OPTIONS.length].id,
   carSetupDone: Boolean(child.carSetupDone),
 }));
 
@@ -72,6 +79,10 @@ function getNotes(childId) { return STATE.notes[childId] || {}; }
 function isParentScreen(id) { return PARENT_SCREENS.includes(id); }
 function getCarName(child) { return child?.carName || DEFAULT_CAR_NAME; }
 function getCarColor(child) { return child?.carColor || child?.color || CAR_COLOR_OPTIONS[0]; }
+function getHomeStyle(child) { return child?.homeStyle || HOME_STYLE_OPTIONS[0].id; }
+function getHomeStyleMeta(styleId) {
+  return HOME_STYLE_OPTIONS.find(option => option.id === styleId) || HOME_STYLE_OPTIONS[0];
+}
 function escapeHtml(value) {
   return String(value || '')
     .replace(/&/g, '&amp;')
@@ -121,11 +132,125 @@ function getPlannerWeek(childId, weekKey = getWeekKey()) {
 function getArcadeGamesForGrade(grade) {
   return (typeof ARCADE_GAMES !== 'undefined' ? ARCADE_GAMES : []).filter(game => (game.grades || []).includes(grade));
 }
+function hashString(value) {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = ((hash << 5) - hash) + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
 function getArcadeTopicLabels(game, grade) {
   return (game.topicIds || [])
     .map(topicId => getTopicById(grade, topicId))
     .filter(Boolean)
     .slice(0, 4);
+}
+function getDailyChallengeStore(childId) {
+  if (!STATE.dailyChallenge[childId]) STATE.dailyChallenge[childId] = {};
+  return STATE.dailyChallenge[childId];
+}
+function getDailyChallengeStatus(childId, date = toLocalISODate()) {
+  return getDailyChallengeStore(childId)[date] || null;
+}
+function getDailyChallenge(childId, date = toLocalISODate()) {
+  const child = STATE.children.find(entry => entry.id === childId);
+  if (!child) return null;
+
+  const games = getArcadeGamesForGrade(child.grade);
+  const progress = getProgress(childId);
+  const unfinished = [];
+  const replayable = [];
+
+  games.forEach(game => {
+    (game.topicIds || []).forEach(topicId => {
+      const topic = getTopicById(child.grade, topicId);
+      if (!topic) return;
+      const candidate = {
+        date,
+        childId,
+        gameId: game.id,
+        gameTitle: game.title,
+        gameIcon: game.icon,
+        gameColor: game.color,
+        launchLabel: game.launchLabel || 'Launch challenge',
+        topicId: topic.id,
+        topicTitle: topic.title,
+        topicSubject: topic.subject,
+        topicIcon: topic.icon,
+        bonusXp: 15,
+      };
+      replayable.push(candidate);
+      if ((progress[topic.id] || 0) !== 2) unfinished.push(candidate);
+    });
+  });
+
+  const pool = unfinished.length ? unfinished : replayable;
+  if (!pool.length) return null;
+  const seed = `${childId}|${child.grade}|${date}`;
+  const challenge = pool[hashString(seed) % pool.length];
+  return {
+    ...challenge,
+    mode: unfinished.length ? 'progress' : 'replay',
+    completed: Boolean(getDailyChallengeStatus(childId, date)?.completedAt),
+  };
+}
+function markDailyChallengeComplete(childId, challenge, source = 'arcade') {
+  if (!challenge) return false;
+  const store = getDailyChallengeStore(childId);
+  const existing = store[challenge.date] || {};
+  if (existing.completedAt) return false;
+  store[challenge.date] = {
+    gameId: challenge.gameId,
+    topicId: challenge.topicId,
+    completedAt: new Date().toISOString(),
+    bonusXp: challenge.bonusXp,
+    source,
+  };
+  awardXP(childId, challenge.bonusXp, challenge.topicId);
+  saveState(STATE);
+  return true;
+}
+function maybeCompleteDailyChallenge(childId, gameId, topicIds = [], source = 'arcade') {
+  const challenge = getDailyChallenge(childId);
+  if (!challenge || challenge.completed || challenge.gameId !== gameId) return false;
+
+  const progress = getProgress(childId);
+  const topicComplete = topicIds.includes(challenge.topicId);
+  const replaySatisfied = challenge.mode === 'replay' && (progress[challenge.topicId] || 0) === 2;
+  if (!topicComplete && !replaySatisfied) return false;
+
+  return markDailyChallengeComplete(childId, challenge, source);
+}
+function buildDailyChallengeCard(ch) {
+  const challenge = getDailyChallenge(ch.id);
+  if (!challenge) return '';
+
+  const status = getDailyChallengeStatus(ch.id, challenge.date);
+  const completed = Boolean(status?.completedAt);
+  const ctaLabel = completed ? 'Play again' : challenge.launchLabel;
+  const statusText = completed
+    ? `Completed today. Bonus +${challenge.bonusXp} XP already claimed.`
+    : challenge.mode === 'progress'
+      ? `Finish ${challenge.topicTitle} in ${challenge.gameTitle} to earn +${challenge.bonusXp} bonus XP.`
+      : `Replay ${challenge.gameTitle} today. ${ch.name} has already completed the tagged topic, so any successful run keeps the streak alive.`;
+
+  return `<div class="card challenge-card ${completed ? 'challenge-complete' : ''}">
+    <div class="card-title">Daily Challenge</div>
+    <div class="challenge-head">
+      <div class="challenge-icon" style="background:${challenge.gameColor}">${challenge.gameIcon}</div>
+      <div>
+        <div class="challenge-title">${challenge.gameTitle}</div>
+        <div class="challenge-sub">${challenge.topicIcon} ${escapeHtml(challenge.topicSubject)} - ${escapeHtml(challenge.topicTitle)}</div>
+      </div>
+      <div class="challenge-bonus">+${challenge.bonusXp} XP</div>
+    </div>
+    <div class="challenge-body">${escapeHtml(statusText)}</div>
+    <div class="challenge-actions">
+      <button class="challenge-btn" onclick="launchArcadeGame('${challenge.gameId}')">${completed ? '🎮 ' : '🏁 '}${ctaLabel}</button>
+      <button class="challenge-link" onclick="openArcade()">Browse Arcade</button>
+    </div>
+  </div>`;
 }
 function isAllowedArcadeOrigin(origin) {
   return (STATE.arcadeOrigins || []).includes(origin);
@@ -613,6 +738,7 @@ function addChild() {
     color: col,
     carColor: CAR_COLOR_OPTIONS[STATE.children.length % CAR_COLOR_OPTIONS.length],
     carName: DEFAULT_CAR_NAME,
+    homeStyle: HOME_STYLE_OPTIONS[STATE.children.length % HOME_STYLE_OPTIONS.length].id,
     carSetupDone: false,
   };
   STATE.children.push(ch);
@@ -675,6 +801,10 @@ function goToWorld() {
   updateHUD();
   showScreen('world');
   if (typeof onResize === 'function') onResize();
+}
+
+function openHomeBase() {
+  showScreen('dash', { bypassParentGate: true });
 }
 
 function showWorldFallback() {
@@ -772,6 +902,7 @@ function renderArcade() {
   if (!ch) return;
   const body = document.getElementById('arcade-body');
   const games = getArcadeGamesForGrade(ch.grade);
+  const todayChallenge = getDailyChallenge(ch.id);
 
   let html = `
     <div class="progress-header slide-up">
@@ -787,6 +918,7 @@ function renderArcade() {
 
   games.forEach(game => {
     const topicLabels = getArcadeTopicLabels(game, ch.grade);
+    const isTodayChallenge = todayChallenge?.gameId === game.id;
     html += `
       <div class="arcade-card slide-up">
         <div class="arcade-card-head">
@@ -798,6 +930,7 @@ function renderArcade() {
         </div>
         <div class="arcade-desc">${game.description}</div>
         <div class="arcade-chip-row">
+          ${isTodayChallenge ? '<span class="arcade-chip arcade-chip-challenge">Daily challenge</span>' : ''}
           ${(game.skills || []).map(skill => `<span class="arcade-chip">${skill}</span>`).join('')}
         </div>
         <div class="arcade-topic-list">
@@ -1001,6 +1134,8 @@ function renderDashboard() {
       </div>`;
   });
   html += `</div>
+
+  ${buildDailyChallengeCard(ch)}
 
   <div class="card">
     <div class="card-title">Progress Trend · Last 7 days</div>
@@ -1373,7 +1508,10 @@ function handleArcadeMessage(event) {
       updateHUD();
       if (typeof refreshWorldMilestones === 'function') refreshWorldMilestones();
       showXPToast(amount);
+      if (currentScreen === 'dash') renderDashboard();
     }
+    const challengeCompleted = maybeCompleteDailyChallenge(childId, activeArcadeSession.gameId, [], 'xp');
+    if (challengeCompleted && childId === activeChildId && currentScreen === 'dash') renderDashboard();
     sendArcadeAck(event.source, event.origin, sessionId, 'ok', { awardedXp: amount });
     return;
   }
@@ -1391,6 +1529,8 @@ function handleArcadeMessage(event) {
         applied.push(topicId);
       }
     });
+    const challengeCompleted = maybeCompleteDailyChallenge(childId, activeArcadeSession.gameId, applied, 'topic_done');
+    if (challengeCompleted && childId === activeChildId && currentScreen === 'dash') renderDashboard();
     sendArcadeAck(event.source, event.origin, sessionId, applied.length ? 'ok' : 'ignored', { appliedTopicIds: applied });
     return;
   }
@@ -1631,6 +1771,20 @@ function openCarSetupFromSettings() {
   renderCarSetup(false);
 }
 
+function cycleHomeStyle() {
+  const child = getChild();
+  if (!child) return;
+  const currentIndex = HOME_STYLE_OPTIONS.findIndex(option => option.id === getHomeStyle(child));
+  const nextStyle = HOME_STYLE_OPTIONS[(currentIndex + 1) % HOME_STYLE_OPTIONS.length];
+  child.homeStyle = nextStyle.id;
+  saveState(STATE);
+  if (worldReady && typeof resetWorldForActiveChild === 'function') {
+    resetWorldForActiveChild();
+  }
+  if (parentModeUnlocked) renderSettings();
+  if (currentScreen === 'dash') renderDashboard();
+}
+
 function closeCarSetup() {
   if (pendingCarSetupMandatory) return;
   closeModal('car-setup');
@@ -1784,6 +1938,11 @@ function renderSettings() {
       <div class="settings-label">Car customisation</div>
       <div class="settings-value">${getCarName(ch)} →</div>
     </div>
+    <div class="settings-row" onclick="cycleHomeStyle()" style="cursor:pointer">
+      <div class="settings-icon">🏡</div>
+      <div class="settings-label">Home base style</div>
+      <div class="settings-value">${getHomeStyleMeta(getHomeStyle(ch)).label} →</div>
+    </div>
     <div class="settings-row" onclick="changeParentPin()" style="cursor:pointer">
       <div class="settings-icon">🔢</div>
       <div class="settings-label">Change parent PIN</div>
@@ -1904,7 +2063,7 @@ function resetProgress() {
    SERVICE WORKER REGISTRATION
 ════════════════════════════════════════════════════════ */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js?v=13', { updateViaCache: 'none' }).catch(() => {});
+  navigator.serviceWorker.register('./sw.js?v=16', { updateViaCache: 'none' }).catch(() => {});
 }
 
 window.addEventListener('beforeinstallprompt', e => {

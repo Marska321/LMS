@@ -20,6 +20,10 @@ let ambientLight = null;
 let fillLight = null;
 let activeFireworks = [];
 let activeWorldBursts = [];
+let worldExpansionDecor = [];
+let currentWorldBounds = 23;
+let currentRoadRects = [];
+let currentExpansionTier = null;
 let milestoneDecor = {
   palms: [],
   fountain: null,
@@ -46,6 +50,7 @@ const BUILDING_MODEL_MAP = {
   'Social Sciences': 'models/buildings/bldg_social.glb',
   'Afrikaans FAL': 'models/buildings/bldg_afr.glb',
   'Life Skills': 'models/buildings/bldg_life.glb',
+  'Home Base': 'models/buildings/bldg_home.glb',
   'Maths Arcade': 'models/buildings/bldg_arcade.glb',
 };
 const TREE_MODEL_PATHS = [
@@ -109,7 +114,100 @@ const WORLD_SUBJECTS_ORDER = [
 const BUILDING_POSITIONS = [
   {x:-11,z:-11},{x:11,z:-11},{x:11,z:11},{x:-11,z:11},{x:0,z:-16},{x:0,z:16}
 ];
+const HOME_BUILDING_POSITION = { x: -16, z: 0 };
 const ARCADE_BUILDING_POSITION = { x: 16, z: 0 };
+const WORLD_EXPANSION_TIERS = [
+  {
+    maxGrade: 3,
+    label: 'Foundation Meadow',
+    bounds: 23,
+    treeSteps: TREE_GRID_STEPS,
+    roads: [
+      { x: 0, z: 0, w: 4, l: 46 },
+      { x: 0, z: 0, w: 46, l: 4 },
+    ],
+    landmarks: [
+      { x: -18, z: 18, icon: '📚', color: '#52b788', title: 'Reading Garden' },
+      { x: 18, z: -18, icon: '🌿', color: '#84cc16', title: 'Nature Patch' },
+    ],
+  },
+  {
+    maxGrade: 5,
+    label: 'Discovery District',
+    bounds: 31,
+    treeSteps: [-26, -22, -18, -14, -10, -6, 6, 10, 14, 18, 22, 26],
+    roads: [
+      { x: 0, z: 0, w: 4, l: 62 },
+      { x: 0, z: 0, w: 62, l: 4 },
+      { x: 0, z: -24, w: 48, l: 3 },
+      { x: 0, z: 24, w: 48, l: 3 },
+      { x: -24, z: 0, w: 3, l: 48 },
+      { x: 24, z: 0, w: 3, l: 48 },
+    ],
+    landmarks: [
+      { x: -24, z: -24, icon: '🔬', color: '#3b82f6', title: 'Discovery Deck' },
+      { x: 24, z: 24, icon: '🌍', color: '#22c55e', title: 'Explorer Ridge' },
+      { x: -24, z: 24, icon: '📚', color: '#8b5cf6', title: 'Story Square' },
+      { x: 24, z: -24, icon: '🎮', color: '#f97316', title: 'Challenge Court' },
+    ],
+  },
+  {
+    maxGrade: Infinity,
+    label: 'Senior Circuit',
+    bounds: 38,
+    treeSteps: [-34, -30, -26, -22, -18, -14, -10, -6, 6, 10, 14, 18, 22, 26, 30, 34],
+    roads: [
+      { x: 0, z: 0, w: 4, l: 76 },
+      { x: 0, z: 0, w: 76, l: 4 },
+      { x: 0, z: -24, w: 56, l: 3 },
+      { x: 0, z: 24, w: 56, l: 3 },
+      { x: -24, z: 0, w: 3, l: 56 },
+      { x: 24, z: 0, w: 3, l: 56 },
+      { x: 0, z: -32, w: 70, l: 2.6 },
+      { x: 0, z: 32, w: 70, l: 2.6 },
+      { x: -32, z: 0, w: 2.6, l: 70 },
+      { x: 32, z: 0, w: 2.6, l: 70 },
+    ],
+    landmarks: [
+      { x: -31, z: -31, icon: '🔬', color: '#2563eb', title: 'Research Ridge' },
+      { x: 31, z: -31, icon: '📐', color: '#dc2626', title: 'Maths Mile' },
+      { x: -31, z: 31, icon: '📚', color: '#7c3aed', title: 'Writers Way' },
+      { x: 31, z: 31, icon: '🌍', color: '#16a34a', title: 'Atlas Point' },
+      { x: 0, z: 34, icon: '🎮', color: '#ea580c', title: 'Arcade Plaza' },
+    ],
+  },
+];
+
+function getWorldExpansionTier(grade) {
+  return WORLD_EXPANSION_TIERS.find(tier => grade <= tier.maxGrade) || WORLD_EXPANSION_TIERS[WORLD_EXPANSION_TIERS.length - 1];
+}
+
+function getHomeBuildingStyle(child) {
+  const style = typeof getHomeStyle === 'function' ? getHomeStyle(child) : 'cottage';
+  const accent = typeof getCarColor === 'function' ? getCarColor(child) : (child?.color || '#2d6a4f');
+  if (style === 'modern') {
+    return {
+      modelPath: 'models/buildings/bldg_home_alt.glb',
+      color: accent,
+      bodyColor: '#dfe4ea',
+      roofColor: '#9aa7b3',
+    };
+  }
+  if (style === 'farmhouse') {
+    return {
+      modelPath: 'models/buildings/bldg_home.glb',
+      color: accent,
+      bodyColor: '#f1e4d1',
+      roofColor: '#b86f52',
+    };
+  }
+  return {
+    modelPath: 'models/buildings/bldg_home.glb',
+    color: accent,
+    bodyColor: '#f7efe1',
+    roofColor: '#c59764',
+  };
+}
 
 async function initWorld() {
   if (typeof THREE === 'undefined') return false;
@@ -312,9 +410,13 @@ function resetWorldForActiveChild() {
   treeTops = [];
   cloudGroups = [];
   dustPuffs = [];
+  worldExpansionDecor = [];
   worldStar = null;
   carBodyMesh = null;
   carCabinMesh = null;
+  currentRoadRects = [];
+  currentExpansionTier = null;
+  currentWorldBounds = 23;
   milestoneDecor = { palms: [], fountain: null, banners: [] };
   carVel = 0;
   carAngle = 0;
@@ -333,19 +435,25 @@ function buildScene() {
   treeTops = [];
   cloudGroups = [];
   dustPuffs = [];
+  worldExpansionDecor = [];
   milestoneDecor = { palms: [], fountain: null, banners: [] };
+
+  const ch = getChild();
+  currentExpansionTier = getWorldExpansionTier(ch?.grade || 1);
+  currentWorldBounds = currentExpansionTier.bounds;
+  currentRoadRects = currentExpansionTier.roads.map(road => ({ ...road }));
 
   // Ground
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(110, 110),
+    new THREE.PlaneGeometry(Math.max(currentWorldBounds * 3.2, 110), Math.max(currentWorldBounds * 3.2, 110)),
     new THREE.MeshLambertMaterial({ color: 0x7ec850 })
   );
   ground.rotation.x = -Math.PI/2;
   ground.receiveShadow = true;
   scene.add(ground);
 
-  // Paths (cross)
-  [[0,0,4,46],[0,0,46,4]].forEach(([x,z,w,l]) => {
+  // Roads
+  currentRoadRects.forEach(({ x, z, w, l }) => {
     const road = new THREE.Mesh(
       new THREE.PlaneGeometry(w, l),
       new THREE.MeshLambertMaterial({ color: 0x666666 })
@@ -358,7 +466,8 @@ function buildScene() {
 
   // Road lines
   const lineMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  for (let i = -7; i <= 7; i++) {
+  const laneRepeats = Math.floor(currentWorldBounds / 3);
+  for (let i = -laneRepeats; i <= laneRepeats; i++) {
     if (Math.abs(i) < 1) continue;
     const d1 = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 1.2), lineMat);
     d1.rotation.x = -Math.PI/2; d1.position.set(0, 0.02, i * 3);
@@ -369,13 +478,26 @@ function buildScene() {
   }
 
   // Trees
-  generateTreePoints().forEach(([tx, tz]) => makeTree(tx, tz));
+  generateTreePoints(currentExpansionTier).forEach(([tx, tz]) => makeTree(tx, tz));
   makeClouds();
 
   // Buildings
-  const ch = getChild();
   const subjects = CAPS_CURRICULUM[ch.grade];
   buildingMeshes = [];
+  const homeStyle = getHomeBuildingStyle(ch);
+  const overallTotals = calcTotals(ch.id, ch.grade);
+  const homeProgress = overallTotals.total ? Math.round((overallTotals.done / overallTotals.total) * 100) : 0;
+  buildingMeshes.push(makeBuilding('Home Base', {
+    color: homeStyle.color,
+    bodyColor: homeStyle.bodyColor,
+    roofColor: homeStyle.roofColor,
+    icon: '🏡',
+    xp: 0,
+    topics: [],
+    isHome: true,
+    styleId: typeof getHomeStyle === 'function' ? getHomeStyle(ch) : 'cottage',
+    modelPath: homeStyle.modelPath,
+  }, HOME_BUILDING_POSITION.x, HOME_BUILDING_POSITION.z, homeProgress));
   WORLD_SUBJECTS_ORDER.forEach((name, i) => {
     const sub = subjects[name];
     if (!sub) return;
@@ -391,6 +513,7 @@ function buildScene() {
     isArcade: true,
   }, ARCADE_BUILDING_POSITION.x, ARCADE_BUILDING_POSITION.z, 0));
 
+  addExpansionLandmarks(currentExpansionTier);
   buildTownCenter();
   applyMilestoneWorldState();
 }
@@ -476,15 +599,80 @@ function buildTownCenter() {
   worldStar = null;
 }
 
-function generateTreePoints() {
+function addExpansionLandmarks(tier) {
+  (tier.landmarks || []).forEach(landmark => {
+    const deco = makeExpansionLandmark(landmark);
+    worldExpansionDecor.push(deco);
+  });
+}
+
+function makeExpansionLandmark(landmark) {
+  const group = new THREE.Group();
+  const accent = new THREE.Color(landmark.color);
+  const pad = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.9, 2.2, 0.45, 18),
+    new THREE.MeshLambertMaterial({ color: 0xe8dcc5 })
+  );
+  pad.position.y = 0.22;
+  pad.receiveShadow = true;
+  group.add(pad);
+
+  const core = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.42, 0.64, 2.8, 12),
+    new THREE.MeshLambertMaterial({ color: accent.clone().lerp(new THREE.Color(0xffffff), 0.28) })
+  );
+  core.position.y = 1.55;
+  core.castShadow = true;
+  group.add(core);
+
+  const beacon = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.55, 0),
+    new THREE.MeshLambertMaterial({
+      color: 0xfff5cc,
+      emissive: accent,
+      emissiveIntensity: 0.5,
+    })
+  );
+  beacon.position.y = 3.35;
+  group.add(beacon);
+
+  const sign = makeSubjectSign({ icon: landmark.icon, color: landmark.color, name: landmark.title });
+  sign.position.set(0, 4.4, 0);
+  sign.scale.setScalar(0.9);
+  group.add(sign);
+
+  if (currentExpansionTier?.bounds > 23) {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(2.5, 0.06, 8, 42),
+      new THREE.MeshLambertMaterial({
+        color: accent.clone().lerp(new THREE.Color(0xffffff), 0.4),
+        emissive: accent,
+        emissiveIntensity: 0.16,
+        transparent: true,
+        opacity: 0.85,
+      })
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.12;
+    group.add(ring);
+  }
+
+  group.position.set(landmark.x, 0, landmark.z);
+  scene.add(group);
+  return { group, beacon, sign, color: landmark.color, title: landmark.title, position: { x: landmark.x, z: landmark.z } };
+}
+
+function generateTreePoints(tier = currentExpansionTier || getWorldExpansionTier(getChild()?.grade || 1)) {
   const points = [];
   const buildingBuffers = [
     ...BUILDING_POSITIONS.map(pos => ({ x: pos.x, z: pos.z, radius: 4.8 })),
+    { x: HOME_BUILDING_POSITION.x, z: HOME_BUILDING_POSITION.z, radius: 4.8 },
     { x: ARCADE_BUILDING_POSITION.x, z: ARCADE_BUILDING_POSITION.z, radius: 4.8 },
+    ...((tier.landmarks || []).map(landmark => ({ x: landmark.x, z: landmark.z, radius: 4.4 }))),
   ];
 
-  for (const tx of TREE_GRID_STEPS) {
-    for (const tz of TREE_GRID_STEPS) {
+  for (const tx of tier.treeSteps) {
+    for (const tz of tier.treeSteps) {
       if (isRoadCorridor(tx, tz)) continue;
       if (isNearCenter(tx, tz)) continue;
       if (isInsideBuildingBuffer(tx, tz, buildingBuffers)) continue;
@@ -496,7 +684,10 @@ function generateTreePoints() {
 }
 
 function isRoadCorridor(x, z) {
-  return Math.abs(x) < 4.6 || Math.abs(z) < 4.6;
+  return currentRoadRects.some(road =>
+    Math.abs(x - road.x) < (road.w / 2) + 1.2 &&
+    Math.abs(z - road.z) < (road.l / 2) + 1.2
+  );
 }
 
 function isNearCenter(x, z) {
@@ -799,7 +990,8 @@ function spawnWorldXPBurst(worldPosition, amount) {
   });
 }
 
-function getBuildingModelPath(subjectName) {
+function getBuildingModelPath(subjectName, subData = null) {
+  if (subData?.isHome && subData.modelPath) return subData.modelPath;
   return BUILDING_MODEL_MAP[subjectName] || null;
 }
 
@@ -829,16 +1021,30 @@ function setMeshEmissive(meshes, color, intensity) {
   });
 }
 
+function getBuildingProgressValue(building) {
+  const ch = getChild();
+  if (!building || !ch) return 0;
+  if (building.userData.subData?.isHome) {
+    const { total, done } = calcTotals(activeChildId, ch.grade);
+    return total ? Math.round((done / total) * 100) : 0;
+  }
+  if (building.userData.subData?.isArcade) {
+    return Math.min(Math.round((STATE.xp[activeChildId] || 0) / 20), 100);
+  }
+  return calcProgress(activeChildId, ch.grade, building.userData.subject);
+}
+
 function makeBuilding(name, sub, x, z, progPct) {
   const group = new THREE.Group();
   const col = new THREE.Color(sub.color);
-  const lightCol = new THREE.Color(sub.color).lerp(new THREE.Color(0xffffff), 0.5);
+  const bodyCol = new THREE.Color(sub.bodyColor || sub.color);
+  const lightCol = new THREE.Color(sub.roofColor || sub.color).lerp(new THREE.Color(0xffffff), 0.28);
   let flag = null;
   let pole = null;
   let primaryMeshes = [];
   let roofMeshes = [];
 
-  const buildingAsset = instantiateGLB(getBuildingModelPath(name), { width: 4.2, depth: 4.2, height: 5.6 });
+  const buildingAsset = instantiateGLB(getBuildingModelPath(name, sub), { width: 4.2, depth: 4.2, height: 5.6 });
   let roof = null;
 
   if (buildingAsset) {
@@ -848,7 +1054,7 @@ function makeBuilding(name, sub, x, z, progPct) {
   } else {
     const base = new THREE.Mesh(
       new THREE.BoxGeometry(3.8, 3.2, 3.8),
-      new THREE.MeshLambertMaterial({ color: col })
+      new THREE.MeshLambertMaterial({ color: bodyCol })
     );
     base.position.y = 1.6;
     base.castShadow = base.receiveShadow = true;
@@ -865,6 +1071,19 @@ function makeBuilding(name, sub, x, z, progPct) {
     primaryMeshes = [base];
     roofMeshes = [roof];
   }
+
+  primaryMeshes.forEach(mesh => {
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    materials.forEach(material => {
+      if (material?.color && sub.bodyColor) material.color.copy(bodyCol);
+    });
+  });
+  roofMeshes.forEach(mesh => {
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    materials.forEach(material => {
+      if (material?.color && sub.roofColor) material.color.copy(lightCol);
+    });
+  });
 
   if (!buildingAsset) {
     const door = new THREE.Mesh(
@@ -1053,6 +1272,22 @@ function makeIconBadge(sub) {
       badge.add(bridge);
       break;
     }
+    case '🏡': {
+      const roof = new THREE.Mesh(
+        new THREE.ConeGeometry(0.14, 0.16, 4),
+        new THREE.MeshLambertMaterial({ color: 0xffffff })
+      );
+      roof.position.y = 0.04;
+      roof.rotation.z = Math.PI / 4;
+      const house = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, 0.12, 0.03),
+        new THREE.MeshLambertMaterial({ color: 0xffffff })
+      );
+      house.position.y = -0.08;
+      badge.add(roof);
+      badge.add(house);
+      break;
+    }
     default: {
       const star = new THREE.Mesh(
         new THREE.OctahedronGeometry(0.14, 0),
@@ -1233,8 +1468,8 @@ function animate() {
 
   let nx = carGroup.position.x + Math.sin(carAngle) * carVel;
   let nz = carGroup.position.z + Math.cos(carAngle) * carVel;
-  nx = Math.max(-23, Math.min(23, nx));
-  nz = Math.max(-23, Math.min(23, nz));
+  nx = Math.max(-currentWorldBounds, Math.min(currentWorldBounds, nx));
+  nz = Math.max(-currentWorldBounds, Math.min(currentWorldBounds, nz));
 
   let blocked = false;
   for (const b of buildingMeshes) {
@@ -1332,7 +1567,8 @@ function drawMinimap() {
   const mc = document.getElementById('minimap-canvas');
   const ctx = mc.getContext('2d');
   const W = mc.width, H = mc.height;
-  const S = W / 50; // scale: 50 world units = full minimap
+  const mapSpan = currentWorldBounds * 2 + 6;
+  const S = W / mapSpan;
   const ox = W/2, oz = H/2;
   ctx.clearRect(0,0,W,H);
   ctx.fillStyle = '#1a3a28';
@@ -1340,8 +1576,14 @@ function drawMinimap() {
 
   // Roads
   ctx.fillStyle = '#555';
-  ctx.fillRect(ox-4*S/2, 0, 4*S, H);
-  ctx.fillRect(0, oz-4*S/2, W, 4*S);
+  currentRoadRects.forEach(road => {
+    ctx.fillRect(
+      ox + (road.x - road.w / 2) * S,
+      oz + (road.z - road.l / 2) * S,
+      road.w * S,
+      road.l * S
+    );
+  });
 
   // Buildings
   buildingMeshes.forEach(b => {
@@ -1349,6 +1591,15 @@ function drawMinimap() {
     const bz = oz + b.position.z * S;
     ctx.fillStyle = b.userData.subData.color;
     ctx.fillRect(bx - 3*S/2, bz - 3*S/2, 3*S, 3*S);
+  });
+
+  worldExpansionDecor.forEach(landmark => {
+    const lx = ox + landmark.position.x * S;
+    const lz = oz + landmark.position.z * S;
+    ctx.beginPath();
+    ctx.fillStyle = landmark.color;
+    ctx.arc(lx, lz, Math.max(S * 1.1, 3), 0, Math.PI * 2);
+    ctx.fill();
   });
 
   // Car
@@ -1408,6 +1659,16 @@ function updateMilestoneAnimations(time) {
     milestoneDecor.fountain.water.position.y = 1.78 + Math.sin(time * 3.2) * 0.12;
     milestoneDecor.fountain.water.scale.y = 0.9 + Math.sin(time * 2.4) * 0.08;
   }
+
+  worldExpansionDecor.forEach((landmark, index) => {
+    if (landmark.beacon) {
+      landmark.beacon.position.y = 3.35 + Math.sin(time * 2 + index * 0.7) * 0.18;
+      landmark.beacon.rotation.y += 0.02;
+    }
+    if (landmark.sign) {
+      landmark.sign.lookAt(camera.position);
+    }
+  });
 }
 
 function updateFireworks() {
@@ -1492,9 +1753,8 @@ function spawnDustPuff() {
 
 function updateBuildingProgress() {
   if (!buildingMeshes.length) return;
-  const ch = getChild();
   buildingMeshes.forEach(b => {
-    const prog = calcProgress(activeChildId, ch.grade, b.userData.subject);
+    const prog = getBuildingProgressValue(b);
     b.userData.progress = prog;
     const fill = b.userData.progressFill;
     if (fill && fill.geometry) {
@@ -1508,6 +1768,10 @@ function updateBuildingProgress() {
 
 function enterSubjectFromWorld() {
   if (!nearBuilding) return;
+  if (nearBuilding.userData.subData?.isHome) {
+    openHomeBase();
+    return;
+  }
   if (nearBuilding.userData.subData?.isArcade) {
     openArcade();
     return;
