@@ -91,6 +91,16 @@ function escapeHtml(value) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+function encodeSharePayload(data) {
+  try {
+    return btoa(unescape(encodeURIComponent(JSON.stringify(data))))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/g, '');
+  } catch {
+    return '';
+  }
+}
 function getTopicNote(childId, topicId) {
   return getNotes(childId)[topicId] || '';
 }
@@ -1295,6 +1305,110 @@ function getLogEntriesForReport(childId) {
   ];
   return (entries.length ? entries : sampleEntries).slice(0, 8);
 }
+function buildTutorShareSnapshot(childId = activeChildId) {
+  const ch = STATE.children.find(child => child.id === childId);
+  if (!ch) return null;
+
+  ensureProgressTracking(ch.id);
+  const weekKey = getWeekKey();
+  const trendSnapshots = getRecentProgressSnapshots(ch.id, ch.grade, 7);
+  const noteEntries = Object.entries(getNotes(ch.id)).map(([topicId, note]) => {
+    const topic = getTopicById(ch.grade, topicId);
+    return topic ? {
+      topicId,
+      subject: topic.subject,
+      title: topic.title,
+      icon: topic.icon,
+      color: topic.color,
+      note,
+    } : null;
+  }).filter(Boolean);
+  const plannerDays = PLANNER_DAYS.map(day => ({
+    key: day.key,
+    label: day.label,
+    entries: getPlannerEntries(ch.id, ch.grade, day.key, weekKey).map(entry => ({
+      topicId: entry.id,
+      subject: entry.subject,
+      title: entry.title,
+      icon: entry.icon,
+      color: entry.color,
+    })),
+  }));
+  const subjectSummary = Object.entries(CAPS_CURRICULUM[ch.grade] || {}).map(([name, sub]) => ({
+    subject: name,
+    icon: sub.icon,
+    color: sub.color,
+    done: getSubjectDoneCount(ch.id, ch.grade, name),
+    inProgress: getSubjectInProgressCount(ch.id, ch.grade, name),
+    total: sub.topics.length,
+    percent: calcProgress(ch.id, ch.grade, name),
+    notes: countTopicNotes(ch.id, ch.grade, name),
+  }));
+
+  return {
+    version: 1,
+    mode: 'tutor',
+    createdAt: new Date().toISOString(),
+    child: {
+      id: ch.id,
+      name: ch.name,
+      grade: ch.grade,
+      initials: ch.initials,
+      color: ch.color,
+    },
+    progress: { ...getProgress(ch.id) },
+    totals: calcTotals(ch.id, ch.grade),
+    trend: trendSnapshots.map(snapshot => ({
+      date: snapshot.date,
+      totalDone: snapshot.totalDone,
+      totalTopics: snapshot.totalTopics,
+    })),
+    subjectSummary,
+    notes: noteEntries.slice(0, 24),
+    planner: {
+      weekKey,
+      label: formatWeekLabel(weekKey),
+      totalPlanned: getPlannerTopicCount(ch.id, weekKey),
+      days: plannerDays,
+    },
+    portfolio: getPortfolioItemsForReport(ch.id).slice(0, 12),
+    log: getLogEntriesForReport(ch.id).slice(0, 8),
+  };
+}
+async function openTutorShareLink() {
+  if (!parentModeUnlocked) return;
+  const snapshot = buildTutorShareSnapshot();
+  if (!snapshot) return;
+
+  const encoded = encodeSharePayload(snapshot);
+  if (!encoded) {
+    alert('Could not create the tutor share snapshot.');
+    return;
+  }
+
+  const shareUrl = new URL('./parent-dashboard/index.html', window.location.href);
+  shareUrl.hash = 'tutor=' + encoded;
+
+  const target = window.open(shareUrl.toString(), '_blank');
+  let copied = false;
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(shareUrl.toString());
+      copied = true;
+    } catch {}
+  }
+
+  if (!target) {
+    alert(copied
+      ? 'Tutor share link copied. Allow pop-ups if you want it to open automatically.'
+      : 'Allow pop-ups to open the tutor share link automatically.');
+    return;
+  }
+
+  alert(copied
+    ? 'Tutor share view opened in a new tab, and the link was copied for sharing.'
+    : 'Tutor share view opened in a new tab. You can copy the URL from the address bar.');
+}
 function renderInspectionReport() {
   const ch = getChild();
   if (!ch) return;
@@ -1973,6 +2087,11 @@ function renderSettings() {
       <div class="settings-label">Open standalone parent dashboard</div>
       <div class="settings-value">Separate page →</div>
     </div>
+    <div class="settings-row" onclick="openTutorShareLink()" style="cursor:pointer">
+      <div class="settings-icon">🔗</div>
+      <div class="settings-label">Open tutor share link</div>
+      <div class="settings-value">Read-only snapshot →</div>
+    </div>
     <div class="settings-row" onclick="if(confirm('Reset ALL progress? This cannot be undone.'))resetProgress();" style="cursor:pointer">
       <div class="settings-icon">🗑️</div>
       <div class="settings-label btn-danger">Reset progress</div>
@@ -2063,7 +2182,7 @@ function resetProgress() {
    SERVICE WORKER REGISTRATION
 ════════════════════════════════════════════════════════ */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js?v=17', { updateViaCache: 'none' }).catch(() => {});
+  navigator.serviceWorker.register('./sw.js?v=18', { updateViaCache: 'none' }).catch(() => {});
 }
 
 window.addEventListener('beforeinstallprompt', e => {

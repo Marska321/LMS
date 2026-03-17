@@ -94,7 +94,7 @@ Goal from source: support tutor and learning-centre workflows through shared vis
 
 | ID | Task | Status | Repo-aware note |
 | --- | --- | --- | --- |
-| T5.1 | Read-only tutor share link | `Todo` | No tokenized tutor snapshot route or share management exists yet. |
+| T5.1 | Read-only tutor share link | `Done` | Implemented in [js/app.js](/C:/Users/User/LMS/js/app.js) and [parent-dashboard/index.html](/C:/Users/User/LMS/parent-dashboard/index.html) with a generated read-only learner snapshot link, tutor-mode URL parsing, and a locked non-mutating dashboard view for shared progress, notes, planner, portfolio, and log data. |
 | T5.2 | Homework assignment | `Todo` | There is no homework schema, due-date UX, or world/building flag logic tied to assignments. |
 | T5.3 | Centre multi-child dashboard | `Partial` | The parent dashboard already uses multi-child data and includes commercial/centre-oriented prototype ideas, but a distinct centre-PIN read-only dashboard flow is not implemented. |
 

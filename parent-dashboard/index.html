@@ -512,7 +512,7 @@ const CURRICULUM = {
       {id:'a2-3',s:'Luister & Praat',t:'Leer en opsê kinderliedjies en rympies'},
       {id:'a2-4',s:'Lees',t:'Lees eenvoudige sinne en kort stories'},
       {id:'a2-5',s:'Lees',t:'Herken 30 sigwoorde in Afrikaans'},
-      {id:'a2-6',s:'Skryf',t:'Skryf 2–3 sinne oor 'n prentjie'},
+      {id:'a2-6',s:'Skryf',t:"Skryf 2–3 sinne oor 'n prentjie"},
       {id:'a2-7',s:'Taalstrukture',t:'Selfstandige naamwoorde: enkelvoud en meervoud (-e, -s)'},
       {id:'a2-8',s:'Taalstrukture',t:'Werkwoorde in teenwoordige tyd'},
       {id:'a2-9',s:'Taalstrukture',t:'Kleure, getalle, dae van die week — woordeskat'},
@@ -569,11 +569,11 @@ const CURRICULUM = {
       {id:'m3-16',s:'Data Handling',t:'Bar graphs and pictographs: draw, label, interpret'},
     ]},
     'Afrikaans FAL':{color:'#c0392b',icon:'🌿',topics:[
-      {id:'a3-1',s:'Luister & Praat',t:'Luister met begrip: beantwoord vrae oor 'n kort teks'},
+      {id:'a3-1',s:'Luister & Praat',t:"Luister met begrip: beantwoord vrae oor 'n kort teks"},
       {id:'a3-2',s:'Luister & Praat',t:'Mondelinge aanbieding: vertel oor jou gesin of gunsteling ding'},
-      {id:'a3-3',s:'Lees',t:'Lees 'n kort storie en beantwoord vrae'},
+      {id:'a3-3',s:'Lees',t:"Lees 'n kort storie en beantwoord vrae"},
       {id:'a3-4',s:'Lees',t:'Ken 50 sigwoorde; lees in sinne'},
-      {id:'a3-5',s:'Skryf',t:'Skryf 'n kort paragraaf oor 'n prentjie (4–5 sinne)'},
+      {id:'a3-5',s:'Skryf',t:"Skryf 'n kort paragraaf oor 'n prentjie (4–5 sinne)"},
       {id:'a3-6',s:'Skryf',t:'Vriendelike brief: datum, aanhef, liggaam, groete'},
       {id:'a3-7',s:'Taalstrukture',t:'Byvoeglike naamwoorde: beskryf kleur, grootte, vorm'},
       {id:'a3-8',s:'Taalstrukture',t:'Voornaamwoorde: ek, jy, hy, sy, ons, hulle'},
@@ -755,7 +755,39 @@ const CURRICULUM = {
 /* ═══════════ STATE ═══════════ */
 function load(){try{return JSON.parse(localStorage.getItem('hs-parent'))||{};}catch{return{};}}
 function loadLearnerState(){try{return JSON.parse(localStorage.getItem('hs-state'))||{};}catch{return{};}}
+function cloneData(value){return JSON.parse(JSON.stringify(value||null));}
+function decodeSharePayload(raw){
+  if(!raw) return null;
+  try{
+    const normalized=raw.replace(/-/g,'+').replace(/_/g,'/');
+    const padded=normalized + '='.repeat((4 - normalized.length % 4) % 4);
+    return JSON.parse(decodeURIComponent(escape(atob(padded))));
+  }catch{
+    return null;
+  }
+}
+function readTutorSnapshot(){
+  const hash=(location.hash||'').replace(/^#/,'');
+  const params=new URLSearchParams(hash);
+  const snapshot=decodeSharePayload(params.get('tutor'));
+  return snapshot && snapshot.mode==='tutor' && snapshot.child ? snapshot : null;
+}
+const TUTOR_SNAPSHOT = readTutorSnapshot();
+const TUTOR_MODE = Boolean(TUTOR_SNAPSHOT);
+function tutorStateFromSnapshot(snapshot){
+  const childId=snapshot.child.id||'shared-child';
+  return {
+    children:[{...snapshot.child}],
+    progress:{[childId]: cloneData(snapshot.progress)||{}},
+    portfolio:{[childId]: cloneData(snapshot.portfolio)||[]},
+    log:{[childId]: cloneData(snapshot.log)||[]},
+    pin:'0000',
+    plan:'tutor',
+    tutorShare:snapshot,
+  };
+}
 function syncFromLearnerState(target){
+  if(TUTOR_MODE) return;
   const learner = loadLearnerState();
   if(Array.isArray(learner.children) && learner.children.length) target.children = learner.children.map(c => ({...c}));
   if(learner.progress && typeof learner.progress === 'object') target.progress = JSON.parse(JSON.stringify(learner.progress));
@@ -763,6 +795,7 @@ function syncFromLearnerState(target){
   if(learner.log && typeof learner.log === 'object') target.log = JSON.parse(JSON.stringify(learner.log));
 }
 function syncToLearnerState(){
+  if(TUTOR_MODE) return;
   const learner = loadLearnerState();
   learner.children = (ST.children||[]).map(c => ({...c}));
   learner.progress = JSON.parse(JSON.stringify(ST.progress||{}));
@@ -771,10 +804,11 @@ function syncToLearnerState(){
   localStorage.setItem('hs-state',JSON.stringify(learner));
 }
 function save(){
+  if(TUTOR_MODE) return;
   localStorage.setItem('hs-parent',JSON.stringify(ST));
   syncToLearnerState();
 }
-let ST = load();
+let ST = TUTOR_MODE ? tutorStateFromSnapshot(TUTOR_SNAPSHOT) : load();
 syncFromLearnerState(ST);
 if(!ST.children) ST.children=[
   {id:'c1',name:'Joshua',grade:2,initials:'JD',color:'#2d6a4f'},
@@ -792,8 +826,50 @@ let currentPage = 'dashboard';
 function child(){ return ST.children.find(c=>c.id===activeChild); }
 function prog(){ return ST.progress[activeChild]||{}; }
 function setProg(id,val){
+  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
   if(!ST.progress[activeChild]) ST.progress[activeChild]={};
   ST.progress[activeChild][id]=val; save();
+}
+function tutorNotes(){ return Array.isArray(ST.tutorShare?.notes) ? ST.tutorShare.notes : []; }
+function tutorPlannerDays(){ return Array.isArray(ST.tutorShare?.planner?.days) ? ST.tutorShare.planner.days : []; }
+function tutorTrendDelta(){
+  const trend=Array.isArray(ST.tutorShare?.trend) ? ST.tutorShare.trend : [];
+  return trend.length>1 ? (trend[trend.length-1].totalDone - trend[0].totalDone) : 0;
+}
+function tutorBanner(){
+  if(!TUTOR_MODE) return '';
+  const createdAt=ST.tutorShare?.createdAt ? new Date(ST.tutorShare.createdAt).toLocaleString('en-ZA',{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : 'Unknown time';
+  return `<div style="margin-bottom:18px;padding:14px 16px;border-radius:14px;border:1px solid var(--blue-mid);background:linear-gradient(135deg,var(--blue-bg),#ffffff);display:flex;gap:14px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap">
+    <div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--blue);margin-bottom:4px">Tutor share view</div>
+      <div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:3px">${ST.children[0].name} · Grade ${ST.children[0].grade}</div>
+      <div style="font-size:12px;color:var(--ink2);line-height:1.6">Read-only snapshot generated ${createdAt}. This link does not sync back to the family device.</div>
+    </div>
+    <div style="font-size:12px;color:var(--blue);font-weight:600">Readonly • Share-safe</div>
+  </div>`;
+}
+function applyTutorModeChrome(){
+  if(!TUTOR_MODE) return;
+  document.getElementById('lock-screen').classList.add('gone');
+  const brandTag=document.querySelector('.brand-tag');
+  if(brandTag) brandTag.textContent='Tutor View';
+  const planPill=document.querySelector('.plan-pill');
+  if(planPill) planPill.innerHTML='<span class="plan-name">READ-ONLY SHARE</span><span class="plan-upgrade">Tutor</span>';
+  ['ni-materials','ni-apps','ni-upgrade','ni-settings'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.style.display='none';
+  });
+  const addChildBtn=document.querySelector('.add-child-btn');
+  if(addChildBtn) addChildBtn.style.display='none';
+  const topbarBadges=document.querySelector('.topbar-badges');
+  if(topbarBadges) topbarBadges.innerHTML='<span class="tbadge tbadge-popia">🔗 Tutor Share</span><span class="tbadge tbadge-offline">👁️ Read-only</span>';
+  const lockBtn=document.querySelector('.topbar-btn');
+  if(lockBtn){
+    lockBtn.textContent='Read-only';
+    lockBtn.disabled=true;
+    lockBtn.style.opacity='.6';
+    lockBtn.style.cursor='default';
+  }
 }
 function calcPct(grade,subject){
   const topics=(CURRICULUM[grade]?.[subject]?.topics)||[];
@@ -830,6 +906,11 @@ function pinClear(){
   document.getElementById('pd'+pinEntry.length).classList.remove('filled');
 }
 function pinSubmit(){
+  if(TUTOR_MODE){
+    document.getElementById('lock-screen').classList.add('gone');
+    renderSidebar(); nav('dashboard');
+    return;
+  }
   if(String(pinEntry)===String(ST.pin)){
     document.getElementById('lock-screen').classList.add('gone');
     renderSidebar(); nav('dashboard');
@@ -841,6 +922,7 @@ function pinSubmit(){
   }
 }
 function lockApp(){
+  if(TUTOR_MODE) return;
   pinEntry='';
   [0,1,2,3].forEach(i=>document.getElementById('pd'+i).classList.remove('filled'));
   resetPinHint();
@@ -855,6 +937,7 @@ document.addEventListener('keydown',e=>{
 
 /* ═══════════ NAV ═══════════ */
 function nav(page){
+  if(TUTOR_MODE && ['materials','apps','upgrade','settings'].includes(page)) page='dashboard';
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const ni=document.getElementById('ni-'+page);
@@ -885,6 +968,7 @@ function switchChild(id){
   activeChild=id; renderSidebar(); nav(currentPage);
 }
 function addChild(){
+  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
   const name=prompt("Child's name?"); if(!name)return;
   const grade=parseInt(prompt("Grade? (1–7)"));
   if(!grade||grade<1||grade>7){alert('Grade must be 1–7');return;}
@@ -901,9 +985,14 @@ function renderDashboard(){
   const logs=(ST.log[ch.id]||[]).length;
   const subs=CURRICULUM[ch.grade]||{};
   const pct=total?Math.round(done/total*100):0;
+  const notes=tutorNotes();
+  const planner=tutorPlannerDays();
+  const plannerTotal=planner.reduce((sum,day)=>sum+(day.entries?.length||0),0);
+  const trendDelta=tutorTrendDelta();
 
   let html=`
   <div class="fade-in">
+    ${tutorBanner()}
     <div style="margin-bottom:20px">
       <h2 style="font-family:'DM Serif Display',serif;font-size:26px;margin-bottom:4px">
         ${ch.name}'s Learning Overview</h2>
@@ -925,15 +1014,15 @@ function renderDashboard(){
       </div>
       <div class="stat">
         <div class="stat-label">Portfolio Items</div>
-        <div class="stat-num" style="color:var(--purple)">${port+4}</div>
+        <div class="stat-num" style="color:var(--purple)">${TUTOR_MODE ? port : port+4}</div>
         <div class="stat-sub">pieces of evidence</div>
-        <div class="stat-bar"><div class="stat-fill" style="width:${Math.min((port+4)*8,100)}%;background:var(--purple)"></div></div>
+        <div class="stat-bar"><div class="stat-fill" style="width:${Math.min((TUTOR_MODE ? port : port+4)*8,100)}%;background:var(--purple)"></div></div>
       </div>
       <div class="stat">
         <div class="stat-label">Days Logged</div>
-        <div class="stat-num" style="color:var(--blue)">${logs+6}</div>
+        <div class="stat-num" style="color:var(--blue)">${TUTOR_MODE ? logs : logs+6}</div>
         <div class="stat-sub">this year</div>
-        <div class="stat-bar"><div class="stat-fill" style="width:${Math.min((logs+6)*4,100)}%;background:var(--blue)"></div></div>
+        <div class="stat-bar"><div class="stat-fill" style="width:${Math.min((TUTOR_MODE ? logs : logs+6)*4,100)}%;background:var(--blue)"></div></div>
       </div>
     </div>
 
@@ -980,12 +1069,62 @@ function renderDashboard(){
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
             <button class="btn btn-sm" onclick="nav('portfolio')" style="background:var(--purple-bg);color:var(--purple);border-color:var(--purple-mid)">📁 Portfolio</button>
             <button class="btn btn-sm" onclick="nav('log')" style="background:var(--blue-bg);color:var(--blue);border-color:var(--blue-mid)">📅 Log Today</button>
-            <button class="btn btn-sm" onclick="nav('materials')" style="background:var(--amber-bg);color:var(--amber);border-color:var(--amber-mid)">📦 Materials</button>
-            <button class="btn btn-sm btn-primary" onclick="exportInspection()">📄 Export PDF</button>
+            ${TUTOR_MODE
+              ? `<button class="btn btn-sm" onclick="nav('curriculum')" style="background:var(--green-bg);color:var(--green-d);border-color:var(--green-mid)">📚 Curriculum</button>
+                 <button class="btn btn-sm btn-primary" onclick="window.print()">🖨️ Print view</button>`
+              : `<button class="btn btn-sm" onclick="nav('materials')" style="background:var(--amber-bg);color:var(--amber);border-color:var(--amber-mid)">📦 Materials</button>
+                 <button class="btn btn-sm btn-primary" onclick="exportInspection()">📄 Export PDF</button>`}
           </div>
         </div>
       </div>
     </div>
+    ${TUTOR_MODE ? `
+      <div class="g2" style="margin-top:16px">
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Tutor Snapshot</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">
+            <div class="stat" style="padding:12px">
+              <div class="stat-label">Topic Notes</div>
+              <div class="stat-num" style="font-size:24px;color:var(--amber)">${notes.length}</div>
+              <div class="stat-sub">parent annotations shared</div>
+            </div>
+            <div class="stat" style="padding:12px">
+              <div class="stat-label">Planned This Week</div>
+              <div class="stat-num" style="font-size:24px;color:var(--teal)">${plannerTotal}</div>
+              <div class="stat-sub">${ST.tutorShare?.planner?.label||'Current week'}</div>
+            </div>
+            <div class="stat" style="padding:12px">
+              <div class="stat-label">7-Day Trend</div>
+              <div class="stat-num" style="font-size:24px;color:var(--blue)">${trendDelta>=0?'+':''}${trendDelta}</div>
+              <div class="stat-sub">completed topics change</div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            ${(notes.length ? notes.slice(0,4) : [{subject:'Notes',title:'No topic notes shared yet.',note:'The family has not added topic-specific annotations to this snapshot.'}]).map(note=>`
+              <div style="padding:10px 12px;border-radius:10px;background:var(--surface2);border:1px solid var(--border2)">
+                <div style="font-size:11px;font-weight:700;color:${note.color||'var(--ink3)'};margin-bottom:4px">${note.icon||'📝'} ${note.subject}</div>
+                <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:3px">${note.title}</div>
+                <div style="font-size:12px;color:var(--ink2);line-height:1.6">${note.note||''}</div>
+              </div>`).join('')}
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Weekly Plan</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            ${planner.map(day=>`
+              <div style="padding:10px 12px;border-radius:10px;background:var(--surface2);border:1px solid var(--border2)">
+                <div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">${day.label}</div>
+                ${(day.entries&&day.entries.length)
+                  ? day.entries.map(entry=>`<div style="font-size:12px;color:var(--ink2);line-height:1.6;margin-bottom:3px">${entry.icon} ${entry.subject} - ${entry.title}</div>`).join('')
+                  : `<div style="font-size:12px;color:var(--ink3)">No topics scheduled</div>`}
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>` : ''}
   </div>`;
   document.getElementById('main-content').innerHTML=html;
 }
@@ -1020,14 +1159,15 @@ function renderCurriculum(){
   }
   let html=`
   <div class="fade-in">
+    ${tutorBanner()}
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
       <div style="flex:1">
         <h2 style="font-family:'DM Serif Display',serif;font-size:22px">CAPS Curriculum · Grade ${ch.grade}</h2>
         <p style="color:var(--ink2);font-size:13px;margin-top:2px">Progress-based — no terms, focus on mastery</p>
       </div>
-      <select onchange="changeGrade(this.value)" style="padding:7px 12px;border-radius:var(--r);border:1px solid var(--border);font-size:13px;background:var(--surface);font-family:'DM Sans',sans-serif;color:var(--ink)">
+      ${TUTOR_MODE ? `<div style="padding:7px 12px;border-radius:var(--r);border:1px solid var(--border);font-size:13px;background:var(--surface2);color:var(--ink2)">Shared Grade ${ch.grade}</div>` : `<select onchange="changeGrade(this.value)" style="padding:7px 12px;border-radius:var(--r);border:1px solid var(--border);font-size:13px;background:var(--surface);font-family:'DM Sans',sans-serif;color:var(--ink)">
         ${[1,2,3,4,5,6,7].map(g=>`<option value="${g}" ${g===ch.grade?'selected':''}>Grade ${g}</option>`).join('')}
-      </select>
+      </select>`}
     </div>
     <div class="g2 stagger">`;
 
@@ -1060,6 +1200,7 @@ function openSubject(name){
 }
 
 function changeGrade(g){
+  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
   const ch=child(); ch.grade=parseInt(g); save();
   openSubjectName=null; renderCurriculum();
 }
@@ -1076,6 +1217,7 @@ function renderSubjectDetail(name,sub,ch){
 
   let html=`
   <div class="fade-in">
+    ${tutorBanner()}
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
       <button class="btn btn-sm" onclick="openSubjectName=null;renderCurriculum()">← Back</button>
       <div style="width:40px;height:40px;border-radius:10px;background:${sub.color};display:flex;align-items:center;justify-content:center;font-size:18px">${sub.icon}</div>
@@ -1100,20 +1242,38 @@ function renderSubjectDetail(name,sub,ch){
       const si=state===2?'✓':state===1?'◆':'';
       const st=state===2?'Done':state===1?'In progress':'Not started';
       const sc2=state===2?'ts-done':state===1?'ts-partial':'ts-none';
+      const note=TUTOR_MODE ? tutorNotes().find(entry=>entry.topicId===t.id) : null;
       html+=`
-        <div class="topic-row" onclick="cycleT('${t.id}',this)">
+        <div class="topic-row" ${TUTOR_MODE ? 'style="cursor:default"' : `onclick="cycleT('${t.id}',this)"`}>
           <div class="tcheck ${sc}">${si}</div>
           <div class="ttitle ${state===2?'done':''}">${t.t}</div>
+          ${note ? `<div style="font-size:11px;color:${note.color};background:rgba(37,99,235,.08);padding:2px 7px;border-radius:999px">📝 Note</div>` : ''}
           <span class="tstatus ${sc2}">${st}</span>
         </div>`;
     });
   });
+
+  if(TUTOR_MODE){
+    const subjectNotes=tutorNotes().filter(entry=>entry.subject===name);
+    html+=`
+      <div class="card" style="margin-top:18px">
+        <div class="card-head">
+          <span class="card-title">Tutor Notes</span>
+        </div>
+        ${subjectNotes.length ? subjectNotes.map(note=>`
+          <div style="padding:10px 0;border-bottom:1px solid var(--border2)">
+            <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:4px">${note.title}</div>
+            <div style="font-size:12px;color:var(--ink2);line-height:1.6">${note.note}</div>
+          </div>`).join('') : `<div style="font-size:12px;color:var(--ink3)">No subject-specific notes were included in this tutor snapshot.</div>`}
+      </div>`;
+  }
 
   html+=`</div>`;
   document.getElementById('main-content').innerHTML=html;
 }
 
 function cycleT(id,row){
+  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
   const cur=prog()[id]||0;
   const next=(cur+1)%3;
   setProg(id,next);
@@ -1130,7 +1290,7 @@ function cycleT(id,row){
 /* ═══════════ PORTFOLIO ═══════════ */
 function renderPortfolio(){
   const ch=child();
-  const items=[
+  const items=TUTOR_MODE ? (ST.portfolio[ch.id]||[]) : [
     {title:'Number bonds to 20 — worksheet',subject:'Mathematics',type:'Worksheet',icon:'📄',color:'#f0fdf4',tc:'var(--green)',tb:'var(--green-bg)',date:'14 Mar'},
     {title:'Blending words — phonics activity',subject:'English HL',type:'Phonics',icon:'📖',color:'#eff6ff',tc:'var(--blue)',tb:'var(--blue-bg)',date:'12 Mar'},
     {title:'Drawing: my family',subject:'Life Skills',type:'Drawing',icon:'🎨',color:'#f5f3ff',tc:'var(--purple)',tb:'var(--purple-bg)',date:'10 Mar'},
@@ -1140,9 +1300,10 @@ function renderPortfolio(){
 
   document.getElementById('main-content').innerHTML=`
   <div class="fade-in">
+    ${tutorBanner()}
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap">
       <h2 style="font-family:'DM Serif Display',serif;font-size:22px;flex:1">Portfolio — ${ch.name}</h2>
-      <button class="btn btn-sm btn-primary" onclick="addPortItem()">+ Add Item</button>
+      ${TUTOR_MODE ? '' : `<button class="btn btn-sm btn-primary" onclick="addPortItem()">+ Add Item</button>`}
       <button class="btn btn-sm" onclick="exportInspection()">📄 Export PDF</button>
     </div>
     <div style="background:var(--blue-bg);border:1px solid var(--blue-mid);border-radius:var(--r);padding:10px 14px;font-size:13px;color:var(--blue);margin-bottom:16px;display:flex;align-items:center;gap:8px">
@@ -1151,23 +1312,24 @@ function renderPortfolio(){
     <div class="port-grid stagger">
       ${items.map(item=>`
         <div class="port-card">
-          <div class="port-thumb" style="background:${item.color}">${item.icon}</div>
+          <div class="port-thumb" style="background:${item.color||'#f4f4f5'}">${item.icon||'📄'}</div>
           <div class="port-name">${item.title}</div>
           <div class="port-meta">${item.subject} · ${item.date}</div>
           <div class="port-tags">
-            <span class="ptag" style="background:${item.tb};color:${item.tc}">${item.type}</span>
+            <span class="ptag" style="background:${item.tb||'var(--surface2)'};color:${item.tc||'var(--ink2)'}">${item.type||'Work'}</span>
           </div>
         </div>`).join('')}
     </div>
-    <div class="drop-zone" style="margin-top:16px" onclick="addPortItem()">
+    ${TUTOR_MODE ? '' : `<div class="drop-zone" style="margin-top:16px" onclick="addPortItem()">
       <div style="font-size:28px;margin-bottom:8px">📎</div>
       <div style="font-size:14px;font-weight:600;margin-bottom:4px">Add evidence of learning</div>
       <div style="font-size:13px;color:var(--ink2)">Photos of work, PDFs, scanned pages, written notes<br>
         <span style="font-size:11px;color:var(--ink3)">Stored on device only · POPIA compliant</span></div>
-    </div>
+    </div>`}
   </div>`;
 }
 function addPortItem(){
+  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
   const title=prompt('What is this evidence of?'); if(!title)return;
   const subject=prompt('Subject?')||'General';
   const ch=child();
@@ -1177,6 +1339,7 @@ function addPortItem(){
   save(); renderPortfolio();
 }
 function exportInspection(){
+  if(TUTOR_MODE){ window.print(); return; }
   alert('📄 Inspection Portfolio Export\n\nThis will print a formatted PDF including:\n• Child profile and current grade\n• Full portfolio with dates and subjects\n• CAPS topic progress per subject\n• Learning log entries\n\nTip: Use File → Print → Save as PDF in your browser.\n\nFull PDF export with CAPS report card format is available on the Family Plan.');
   window.print();
 }
@@ -1184,7 +1347,7 @@ function exportInspection(){
 /* ═══════════ LOG ═══════════ */
 function renderLog(){
   const ch=child();
-  const sampleLog=[
+  const sampleLog=TUTOR_MODE ? [] : [
     {date:'2026-03-16',subjects:'Mathematics, English',time:'2h 30min',mood:'😄 Great',notes:'Practised number bonds to 20 with counters. Phonics: blending consonant bl-, cl-, fl- words. Read a Level 8 reader independently.'},
     {date:'2026-03-13',subjects:'English, Life Skills',time:'2h 00min',mood:'😊 Good',notes:'Sight words practice — flashcards. Drew "my family" picture for portfolio. Craft: paper folding.'},
     {date:'2026-03-12',subjects:'Mathematics, Afrikaans',time:'2h 45min',mood:'😄 Great',notes:'Counting objects to 100. Afrikaans: learnt colours and numbers 1–20 with songs.'},
@@ -1193,9 +1356,10 @@ function renderLog(){
 
   document.getElementById('main-content').innerHTML=`
   <div class="fade-in">
+    ${tutorBanner()}
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
       <h2 style="font-family:'DM Serif Display',serif;font-size:22px;flex:1">Learning Log — ${ch.name}</h2>
-      <button class="btn btn-sm btn-primary" onclick="logToday()">+ Log Today</button>
+      ${TUTOR_MODE ? '' : `<button class="btn btn-sm btn-primary" onclick="logToday()">+ Log Today</button>`}
     </div>
     ${entries.map(e=>{
       const d=new Date(e.date);
@@ -1216,6 +1380,7 @@ function renderLog(){
   </div>`;
 }
 function logToday(){
+  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
   const subj=prompt('Subjects covered today?'); if(!subj)return;
   const time=prompt('Time spent? (e.g. 2h 30min)')||'—';
   const mood=prompt('How did it go? (Great / Good / OK / Challenging)')||'Good';
@@ -1389,6 +1554,10 @@ function whyCard(icon,title,body){
 
 /* ═══════════ SETTINGS ═══════════ */
 function renderSettings(){
+  if(TUTOR_MODE){
+    nav('dashboard');
+    return;
+  }
   document.getElementById('main-content').innerHTML=`
   <div class="fade-in" style="max-width:560px">
     <h2 style="font-family:'DM Serif Display',serif;font-size:22px;margin-bottom:20px">Settings</h2>
@@ -1470,17 +1639,20 @@ function renderSettings(){
 }
 
 function changePin(){
+  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
   const n=prompt('Enter new 4-digit PIN:');
   if(!n||n.length!==4||isNaN(n)){alert('PIN must be exactly 4 digits');return;}
   ST.pin=n; save(); alert('PIN updated!');
 }
 function editChild(id){
+  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
   const c=ST.children.find(x=>x.id===id);
   const g=parseInt(prompt(`Grade for ${c.name}?`,c.grade));
   if(!g||g<1||g>7){alert('Grade must be 1–7');return;}
   c.grade=g; save(); renderSettings(); renderSidebar();
 }
 function backupData(){
+  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
   const blob=new Blob([JSON.stringify(ST,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
@@ -1488,6 +1660,7 @@ function backupData(){
   a.click(); URL.revokeObjectURL(url);
 }
 function importData(){
+  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
   const input=document.createElement('input');
   input.type='file'; input.accept='.json';
   input.onchange=e=>{
@@ -1498,9 +1671,13 @@ function importData(){
   };
   input.click();
 }
-function resetAll(){ST.progress={};ST.xp={};save();alert('Progress reset.');nav('dashboard');}
+function resetAll(){
+  if(TUTOR_MODE){alert('Tutor view is read-only.'); return;}
+  ST.progress={};ST.xp={};save();alert('Progress reset.');nav('dashboard');
+}
 
 /* ═══ BOOT ═══ */
+applyTutorModeChrome();
 renderSidebar();
 </script>
 </body>
