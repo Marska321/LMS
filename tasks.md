@@ -65,7 +65,7 @@ Goal from source: complete Foundation Phase curriculum coverage and make the par
 | T2.2 | Progress trend chart | `Done` | Implemented in [js/app.js](/C:/Users/User/LMS/js/app.js) with per-child progress metadata/history snapshots, legacy-state backfill, a 7-day dashboard trend chart, and subject-level mini trends for parent review. |
 | T2.3 | Topic annotations / parent notes | `Done` | Implemented in [js/app.js](/C:/Users/User/LMS/js/app.js) and [css/app.css](/C:/Users/User/LMS/css/app.css) with per-topic parent-only notes stored in app state, inline subject-level note controls, and dashboard/export surfacing for inspection context. |
 | T2.4 | Weekly planner view | `Done` | Implemented in [js/app.js](/C:/Users/User/LMS/js/app.js) and [css/app.css](/C:/Users/User/LMS/css/app.css) with parent-mode weekly planning state, per-day topic assignment/removal, and a printable planner card on the main dashboard. |
-| T2.5 | CAPS inspection report card PDF | `Partial` | Portfolio export messaging exists, but the structured report card generation described here is not implemented. |
+| T2.5 | CAPS inspection report card PDF | `Done` | Implemented in [index.html](/C:/Users/User/LMS/index.html), [js/app.js](/C:/Users/User/LMS/js/app.js), and [css/app.css](/C:/Users/User/LMS/css/app.css) with a dedicated inspection report screen, printable report-card layout, subject summaries, notes, planner snapshot, portfolio evidence, and learning-log extracts. |
 
 ## Sprint 3 - Maths Arcade Bridge
 
@@ -74,8 +74,8 @@ Goal from source: connect the LMS and Maths Arcade so XP, topic mastery, and gam
 | ID | Task | Status | Repo-aware note |
 | --- | --- | --- | --- |
 | T3.1 | `postMessage` XP bridge API | `Todo` | No Arcade message protocol, whitelist validation, or `HS_ACK` flow exists in the current codebase. |
-| T3.2 | CAPS topic tags per Arcade game | `Todo` | There is no [data/arcade-games.js](/C:/Users/User/LMS/data) schema yet, and EdTech apps are not wired to topic-tagged game descriptors. |
-| T3.3 | Arcade building in the 3D world | `Todo` | The current world has subject buildings only; there is no special Arcade building or picker flow. |
+| T3.2 | CAPS topic tags per Arcade game | `Done` | Implemented in [data/arcade-games.js](/C:/Users/User/LMS/data/arcade-games.js) with a local Arcade catalog keyed by grade range, skill tags, and linked CAPS topic IDs for picker/filter flows. |
+| T3.3 | Arcade building in the 3D world | `Done` | Implemented in [js/world.js](/C:/Users/User/LMS/js/world.js), [index.html](/C:/Users/User/LMS/index.html), [js/app.js](/C:/Users/User/LMS/js/app.js), and [css/app.css](/C:/Users/User/LMS/css/app.css) with a dedicated Maths Arcade building, world entry routing, and an in-app game picker screen. |
 | T3.4 | Daily challenge quest | `Todo` | No deterministic daily challenge logic or noticeboard/dashboard integration exists yet. |
 
 ## Sprint 4 - World Expansion

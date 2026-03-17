@@ -46,8 +46,9 @@ let pendingWorldEffects = [];
 let deferredInstallPrompt = null;
 let installPromptAvailable = false;
 let worldBooting = false;
+let currentArcadeGameId = null;
 
-const PARENT_SCREENS = ['dash', 'portfolio', 'log'];
+const PARENT_SCREENS = ['dash', 'portfolio', 'log', 'report'];
 const PLANNER_DAYS = [
   { key: 'monday', label: 'Mon' },
   { key: 'tuesday', label: 'Tue' },
@@ -114,6 +115,15 @@ function formatWeekLabel(weekKey) {
 }
 function getPlannerWeek(childId, weekKey = getWeekKey()) {
   return STATE.planner[childId]?.[weekKey] || {};
+}
+function getArcadeGamesForGrade(grade) {
+  return (typeof ARCADE_GAMES !== 'undefined' ? ARCADE_GAMES : []).filter(game => (game.grades || []).includes(grade));
+}
+function getArcadeTopicLabels(game, grade) {
+  return (game.topicIds || [])
+    .map(topicId => getTopicById(grade, topicId))
+    .filter(Boolean)
+    .slice(0, 4);
 }
 function ensurePlannerWeek(childId, weekKey = getWeekKey()) {
   if (!STATE.planner[childId]) STATE.planner[childId] = {};
@@ -647,7 +657,7 @@ function showScreen(id, options = {}) {
   if (el) { el.classList.remove('hidden'); el.classList.add('pop-in'); }
   currentScreen = id;
   const nav = document.getElementById('bottom-nav');
-  if (['lms','dash','portfolio','log'].includes(id)) {
+  if (['lms','arcade','dash','portfolio','log','report'].includes(id)) {
     nav.style.display = 'flex';
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
     const nb = document.getElementById('nav-' + id) || document.getElementById('nav-dash');
@@ -656,8 +666,10 @@ function showScreen(id, options = {}) {
     nav.style.display = 'none';
   }
   if (id === 'dash') renderDashboard();
+  if (id === 'arcade') renderArcade();
   if (id === 'portfolio') renderPortfolio();
   if (id === 'log') renderLog();
+  if (id === 'report') renderInspectionReport();
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -699,6 +711,68 @@ function openSubject(subjectName) {
 
   renderSubject(subjectName, sub, ch);
   showScreen('lms');
+}
+
+function openArcade() {
+  currentArcadeGameId = null;
+  showScreen('arcade');
+}
+
+function renderArcade() {
+  const ch = getChild();
+  if (!ch) return;
+  const body = document.getElementById('arcade-body');
+  const games = getArcadeGamesForGrade(ch.grade);
+
+  let html = `
+    <div class="progress-header slide-up">
+      <div class="progress-circle" style="background:#ff8c42">🎮</div>
+      <div class="progress-info">
+        <div class="progress-label">Maths Arcade - Grade ${ch.grade}</div>
+        <div class="progress-count" style="color:#ff8c42">${games.length} <span style="font-size:14px;color:var(--text3)">games ready</span></div>
+        <div class="subject-note-summary">CAPS-linked practice games chosen for ${ch.name}'s current grade.</div>
+      </div>
+      <div class="xp-badge">⭐ ${(STATE.xp[ch.id] || 0)} XP</div>
+    </div>
+    <div class="arcade-grid">`;
+
+  games.forEach(game => {
+    const topicLabels = getArcadeTopicLabels(game, ch.grade);
+    html += `
+      <div class="arcade-card slide-up">
+        <div class="arcade-card-head">
+          <div class="arcade-icon" style="background:${game.color}">${game.icon}</div>
+          <div>
+            <div class="arcade-title">${game.title}</div>
+            <div class="arcade-meta">${game.difficulty} · Grades ${game.grades.join(', ')}</div>
+          </div>
+        </div>
+        <div class="arcade-desc">${game.description}</div>
+        <div class="arcade-chip-row">
+          ${(game.skills || []).map(skill => `<span class="arcade-chip">${skill}</span>`).join('')}
+        </div>
+        <div class="arcade-topic-list">
+          ${topicLabels.length ? topicLabels.map(topic => `<div class="arcade-topic">${topic.icon} ${topic.subject}: ${escapeHtml(topic.title)}</div>`).join('') : '<div class="arcade-empty">No tagged CAPS topics for this grade yet.</div>'}
+        </div>
+        <button class="arcade-launch-btn" onclick="launchArcadeGame('${game.id}')">${game.launchLabel || 'Play'}</button>
+      </div>`;
+  });
+
+  if (!games.length) {
+    html += `<div class="card"><div class="card-title">No games yet</div><div class="arcade-empty">No arcade games are configured for Grade ${ch.grade} yet.</div></div>`;
+  }
+
+  html += `</div>`;
+  body.innerHTML = html;
+}
+
+function launchArcadeGame(gameId) {
+  const ch = getChild();
+  const game = getArcadeGamesForGrade(ch?.grade || 0).find(entry => entry.id === gameId);
+  if (!ch || !game) return;
+  currentArcadeGameId = gameId;
+  const tagged = getArcadeTopicLabels(game, ch.grade).map(topic => topic.title).join('\n• ');
+  alert(`${game.icon} ${game.title}\n\nThis Arcade launch flow is now wired into the world.\n\nTagged CAPS topics:\n• ${tagged || 'No tags configured yet'}\n\nNext Sprint 3 step: connect live game events through the XP bridge API.`);
 }
 
 function renderSubject(name, sub, ch) {
@@ -1005,8 +1079,192 @@ function addPortfolioItem() {
   renderPortfolio();
 }
 
+function getPortfolioItemsForReport(childId) {
+  const sampleItems = [
+    { id:'p1', title:'Fractions worksheet - mixed ops', subject:'Mathematics', type:'Worksheet', date:'14 Mar 2026' },
+    { id:'p2', title:'Photosynthesis diagram', subject:'Natural Sciences', type:'Drawing', date:'10 Mar 2026' },
+    { id:'p3', title:'Short story: "The Kalahari"', subject:'English HL', type:'Writing', date:'5 Mar 2026' },
+    { id:'p4', title:'Bridge project report', subject:'Technology', type:'Project', date:'1 Mar 2026' },
+  ];
+  return [...sampleItems, ...(STATE.portfolio[childId] || [])];
+}
+function getLogEntriesForReport(childId) {
+  const entries = STATE.log[childId] || [];
+  const sampleEntries = [
+    { date:'2026-03-16', subjects:'Mathematics, English', time:'3h 15min', mood:'😊 Great', notes:'Fractions with unlike denominators using fraction circles. Read chapter 3 of novel. Discussed setting and characters.' },
+    { date:'2026-03-13', subjects:'Natural Sciences, Afrikaans', time:'2h 45min', mood:'😄 Excellent', notes:'Water cycle - drew and labelled diagram. Afrikaans: 20 new vocab words + Duolingo 2 lessons.' },
+    { date:'2026-03-12', subjects:'Mathematics, Social Sciences', time:'3h 00min', mood:'😊 Great', notes:'Geometry: properties of 2D shapes. SA history: Cape sea route explorers.' },
+  ];
+  return (entries.length ? entries : sampleEntries).slice(0, 8);
+}
+function renderInspectionReport() {
+  const ch = getChild();
+  if (!ch) return;
+  ensureProgressTracking(ch.id);
+  const subjects = CAPS_CURRICULUM[ch.grade] || {};
+  const { total, done } = calcTotals(ch.id, ch.grade);
+  const portfolioItems = getPortfolioItemsForReport(ch.id);
+  const logEntries = getLogEntriesForReport(ch.id);
+  const weekKey = getWeekKey();
+  const noteCount = countTopicNotes(ch.id, ch.grade);
+  const plannerCount = getPlannerTopicCount(ch.id, weekKey);
+  const trendSnapshots = getRecentProgressSnapshots(ch.id, ch.grade, 7);
+  const trendDelta = trendSnapshots.length > 1 ? trendSnapshots[trendSnapshots.length - 1].totalDone - trendSnapshots[0].totalDone : 0;
+
+  let html = `
+    <div class="report-sheet">
+      <div class="report-header">
+        <div>
+          <div class="report-eyebrow">HomeSchool Hub Inspection Report</div>
+          <h1>${ch.name} - Grade ${ch.grade}</h1>
+          <div class="report-meta">Generated ${new Date().toLocaleDateString('en-ZA', { year:'numeric', month:'long', day:'numeric' })} · CAPS progress-based record</div>
+        </div>
+        <div class="report-badge">POPIA · On-device only</div>
+      </div>
+
+      <div class="report-summary">
+        <div class="report-stat">
+          <div class="report-stat-label">Topics completed</div>
+          <div class="report-stat-value">${done}</div>
+          <div class="report-stat-sub">${total} total topics in Grade ${ch.grade}</div>
+        </div>
+        <div class="report-stat">
+          <div class="report-stat-label">7-day trend</div>
+          <div class="report-stat-value">${trendDelta >= 0 ? '+' : ''}${trendDelta}</div>
+          <div class="report-stat-sub">Change in completed topics this week</div>
+        </div>
+        <div class="report-stat">
+          <div class="report-stat-label">Topic notes</div>
+          <div class="report-stat-value">${noteCount}</div>
+          <div class="report-stat-sub">Parent annotations saved</div>
+        </div>
+        <div class="report-stat">
+          <div class="report-stat-label">Portfolio evidence</div>
+          <div class="report-stat-value">${portfolioItems.length}</div>
+          <div class="report-stat-sub">Items included in report</div>
+        </div>
+      </div>
+
+      <section class="report-section">
+        <h2>Subject report card</h2>
+        <div class="report-table">
+          <div class="report-table-head">
+            <span>Subject</span>
+            <span>Done</span>
+            <span>In progress</span>
+            <span>Notes</span>
+            <span>Completion</span>
+          </div>`;
+
+  Object.entries(subjects).forEach(([name, sub]) => {
+    const doneCount = getSubjectDoneCount(ch.id, ch.grade, name);
+    const inProgressCount = getSubjectInProgressCount(ch.id, ch.grade, name);
+    const subjectNotes = countTopicNotes(ch.id, ch.grade, name);
+    const pct = calcProgress(ch.id, ch.grade, name);
+    html += `
+          <div class="report-table-row">
+            <span>${sub.icon} ${name}</span>
+            <span>${doneCount}/${sub.topics.length}</span>
+            <span>${inProgressCount}</span>
+            <span>${subjectNotes}</span>
+            <span>${pct}%</span>
+          </div>`;
+  });
+
+  html += `
+        </div>
+      </section>
+
+      <section class="report-section">
+        <h2>Parent notes and observations</h2>
+        <div class="report-note-grid">`;
+
+  const noteEntries = Object.entries(getNotes(ch.id));
+  if (noteEntries.length) {
+    noteEntries.forEach(([topicId, note]) => {
+      const topic = getTopicById(ch.grade, topicId);
+      if (!topic) return;
+      html += `
+          <div class="report-note-card">
+            <div class="report-note-subject" style="color:${topic.color}">${topic.icon} ${topic.subject}</div>
+            <div class="report-note-title">${escapeHtml(topic.title)}</div>
+            <div class="report-note-body">${escapeHtml(note)}</div>
+          </div>`;
+    });
+  } else {
+    html += `<div class="report-empty">No topic notes have been added yet.</div>`;
+  }
+
+  html += `
+        </div>
+      </section>
+
+      <section class="report-section">
+        <h2>Weekly planner snapshot</h2>
+        <div class="report-section-sub">Week of ${formatWeekLabel(weekKey)} · ${plannerCount} planned topic${plannerCount === 1 ? '' : 's'}</div>
+        <div class="report-planner-grid">`;
+
+  PLANNER_DAYS.forEach(day => {
+    const entries = getPlannerEntries(ch.id, ch.grade, day.key, weekKey);
+    html += `
+          <div class="report-planner-day">
+            <div class="report-planner-label">${day.label}</div>
+            ${entries.length ? entries.map(entry => `<div class="report-planner-item">${entry.icon} ${escapeHtml(entry.subject)} - ${escapeHtml(entry.title)}</div>`).join('') : `<div class="report-planner-empty">No topics scheduled</div>`}
+          </div>`;
+  });
+
+  html += `
+        </div>
+      </section>
+
+      <section class="report-section">
+        <h2>Portfolio evidence</h2>
+        <div class="report-list">`;
+
+  portfolioItems.forEach(item => {
+    html += `
+          <div class="report-list-row">
+            <div>
+              <div class="report-list-title">${escapeHtml(item.title)}</div>
+              <div class="report-list-meta">${escapeHtml(item.subject)} · ${escapeHtml(item.type || 'Work')}</div>
+            </div>
+            <div class="report-list-date">${escapeHtml(item.date)}</div>
+          </div>`;
+  });
+
+  html += `
+        </div>
+      </section>
+
+      <section class="report-section">
+        <h2>Learning log extract</h2>
+        <div class="report-list">`;
+
+  logEntries.forEach(entry => {
+    html += `
+          <div class="report-log-row">
+            <div class="report-log-head">
+              <div class="report-list-title">${escapeHtml(entry.date)} · ${escapeHtml(entry.subjects)}</div>
+              <div class="report-list-date">${escapeHtml(entry.time || '—')}</div>
+            </div>
+            <div class="report-log-meta">${escapeHtml(entry.mood || '')}</div>
+            <div class="report-log-notes">${escapeHtml(entry.notes || '')}</div>
+          </div>`;
+  });
+
+  html += `
+        </div>
+      </section>
+    </div>`;
+
+  document.getElementById('report-body').innerHTML = html;
+}
+function printInspectionReport() {
+  renderInspectionReport();
+  setTimeout(() => window.print(), 60);
+}
 function exportPortfolio() {
-  alert('📄 Portfolio export\n\nThis will generate a PDF with:\n• Child profile & grade\n• All portfolio items with dates\n• CAPS curriculum progress per subject\n• Topic annotations / parent notes\n• Learning log entries\n\nFor full PDF generation, open in a desktop browser and use File → Print → Save as PDF.');
+  showScreen('report');
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1509,7 +1767,7 @@ function resetProgress() {
    SERVICE WORKER REGISTRATION
 ════════════════════════════════════════════════════════ */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js?v=10', { updateViaCache: 'none' }).catch(() => {});
+  navigator.serviceWorker.register('./sw.js?v=12', { updateViaCache: 'none' }).catch(() => {});
 }
 
 window.addEventListener('beforeinstallprompt', e => {

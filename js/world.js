@@ -46,6 +46,7 @@ const BUILDING_MODEL_MAP = {
   'Social Sciences': 'models/buildings/bldg_social.glb',
   'Afrikaans FAL': 'models/buildings/bldg_afr.glb',
   'Life Skills': 'models/buildings/bldg_life.glb',
+  'Maths Arcade': 'models/buildings/bldg_arcade.glb',
 };
 const TREE_MODEL_PATHS = [
   'models/nature/tree_round.glb',
@@ -108,6 +109,7 @@ const WORLD_SUBJECTS_ORDER = [
 const BUILDING_POSITIONS = [
   {x:-11,z:-11},{x:11,z:-11},{x:11,z:11},{x:-11,z:11},{x:0,z:-16},{x:0,z:16}
 ];
+const ARCADE_BUILDING_POSITION = { x: 16, z: 0 };
 
 async function initWorld() {
   if (typeof THREE === 'undefined') return false;
@@ -381,6 +383,13 @@ function buildScene() {
     const prog = calcProgress(activeChildId, ch.grade, name);
     buildingMeshes.push(makeBuilding(name, sub, pos.x, pos.z, prog));
   });
+  buildingMeshes.push(makeBuilding('Maths Arcade', {
+    color: '#ff8c42',
+    icon: '🎮',
+    xp: 0,
+    topics: [],
+    isArcade: true,
+  }, ARCADE_BUILDING_POSITION.x, ARCADE_BUILDING_POSITION.z, 0));
 
   buildTownCenter();
   applyMilestoneWorldState();
@@ -469,7 +478,10 @@ function buildTownCenter() {
 
 function generateTreePoints() {
   const points = [];
-  const buildingBuffers = BUILDING_POSITIONS.map(pos => ({ x: pos.x, z: pos.z, radius: 4.8 }));
+  const buildingBuffers = [
+    ...BUILDING_POSITIONS.map(pos => ({ x: pos.x, z: pos.z, radius: 4.8 })),
+    { x: ARCADE_BUILDING_POSITION.x, z: ARCADE_BUILDING_POSITION.z, radius: 4.8 },
+  ];
 
   for (const tx of TREE_GRID_STEPS) {
     for (const tz of TREE_GRID_STEPS) {
@@ -1028,6 +1040,19 @@ function makeIconBadge(sub) {
       badge.add(stem);
       break;
     }
+    case '🎮': {
+      const left = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.1, 0.03), new THREE.MeshLambertMaterial({ color: 0xffffff }));
+      const right = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.1, 0.03), new THREE.MeshLambertMaterial({ color: 0xffffff }));
+      const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.06, 0.03), new THREE.MeshLambertMaterial({ color: 0xffffff }));
+      left.position.x = -0.11;
+      right.position.x = 0.11;
+      left.rotation.z = 0.18;
+      right.rotation.z = -0.18;
+      badge.add(left);
+      badge.add(right);
+      badge.add(bridge);
+      break;
+    }
     default: {
       const star = new THREE.Mesh(
         new THREE.OctahedronGeometry(0.14, 0),
@@ -1483,6 +1508,10 @@ function updateBuildingProgress() {
 
 function enterSubjectFromWorld() {
   if (!nearBuilding) return;
+  if (nearBuilding.userData.subData?.isArcade) {
+    openArcade();
+    return;
+  }
   openSubject(nearBuilding.userData.subject);
 }
 

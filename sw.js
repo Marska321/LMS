@@ -1,13 +1,14 @@
-const CACHE = 'homeschool-lms-v11';
+const CACHE = 'homeschool-lms-v13';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json?v=4',
   './parent-dashboard/index.html',
   './css/app.css?v=3',
-  './js/app.js?v=9',
-  './js/world.js?v=5',
+  './js/app.js?v=11',
+  './js/world.js?v=6',
   './data/curriculum.js?v=6',
+  './data/arcade-games.js?v=2',
   './lib/three.min.js',
   './lib/GLTFLoader.js',
   './models/textures/colormap.png',

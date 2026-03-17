@@ -99,6 +99,19 @@
 </div>
 
 <!-- ════════════════════════════════════════════════════
+     SCREEN 3B: ARCADE
+═════════════════════════════════════════════════════ -->
+<div id="screen-arcade" class="screen hidden">
+  <div class="lms-topbar">
+    <button class="back-btn" onclick="goToWorld()">← World</button>
+    <div class="lms-subject-icon">🎮</div>
+    <div class="lms-subject-title">Maths Arcade</div>
+    <button class="back-btn" onclick="showScreen('dash')" style="font-size:12px">📊 Overview</button>
+  </div>
+  <div class="lms-body arcade-body" id="arcade-body"></div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
      SCREEN 4: DASHBOARD OVERVIEW
 ═════════════════════════════════════════════════════ -->
 <div id="screen-dash" class="screen hidden">
@@ -132,6 +145,18 @@
     <button class="back-btn" onclick="logToday()" style="color:var(--green);border-color:var(--green)">+ Log Today</button>
   </div>
   <div id="log-body" style="overflow-y:auto;flex:1;padding:16px"></div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     SCREEN 7: INSPECTION REPORT
+═════════════════════════════════════════════════════ -->
+<div id="screen-report" class="screen hidden">
+  <div class="lms-topbar report-topbar no-print">
+    <button class="back-btn" onclick="showScreen('dash')">← Overview</button>
+    <div class="lms-subject-title">Inspection Report</div>
+    <button class="back-btn" onclick="printInspectionReport()" style="color:var(--green);border-color:var(--green)">🖨 Print</button>
+  </div>
+  <div id="report-body" class="report-body"></div>
 </div>
 
 <!-- Bottom nav (shown on lms/dash/portfolio/log screens) -->
@@ -220,9 +245,10 @@
 
 <!-- ═══════════ SCRIPTS ═══════════ -->
 <script src="data/curriculum.js?v=6"></script>
+<script src="data/arcade-games.js?v=2"></script>
 <script src="lib/three.min.js"></script>
 <script src="lib/GLTFLoader.js"></script>
-<script src="js/world.js?v=5"></script>
-<script src="js/app.js?v=9"></script>
+<script src="js/world.js?v=6"></script>
+<script src="js/app.js?v=11"></script>
 </body>
 </html>
