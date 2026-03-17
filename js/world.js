@@ -24,6 +24,7 @@ let worldExpansionDecor = [];
 let currentWorldBounds = 23;
 let currentRoadRects = [];
 let currentExpansionTier = null;
+let sageCompanion = null;
 let milestoneDecor = {
   palms: [],
   fountain: null,
@@ -237,6 +238,7 @@ async function initWorld() {
     createSceneLights();
     buildScene();
     buildCar();
+    createSageCompanion();
     applyWeather();
     bindInput();
     animate();
@@ -411,6 +413,7 @@ function resetWorldForActiveChild() {
   cloudGroups = [];
   dustPuffs = [];
   worldExpansionDecor = [];
+  sageCompanion = null;
   worldStar = null;
   carBodyMesh = null;
   carCabinMesh = null;
@@ -426,6 +429,7 @@ function resetWorldForActiveChild() {
   createSceneLights();
   buildScene();
   buildCar();
+  createSageCompanion();
   applyWeather();
   updateBuildingProgress();
   return true;
@@ -597,6 +601,133 @@ function makePalmTree(tx, tz) {
 
 function buildTownCenter() {
   worldStar = null;
+}
+
+function createSageCompanion() {
+  const group = new THREE.Group();
+
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(0.44, 14, 14),
+    new THREE.MeshLambertMaterial({
+      color: 0xf5e9ff,
+      emissive: 0xa855f7,
+      emissiveIntensity: 0.45,
+      transparent: true,
+      opacity: 0.92,
+    })
+  );
+  group.add(glow);
+
+  const core = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.18, 0),
+    new THREE.MeshLambertMaterial({
+      color: 0xffffff,
+      emissive: 0x9ad1ff,
+      emissiveIntensity: 0.35,
+    })
+  );
+  group.add(core);
+
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(0.62, 0.04, 8, 32),
+    new THREE.MeshLambertMaterial({
+      color: 0x9ad1ff,
+      emissive: 0x7dd3fc,
+      emissiveIntensity: 0.22,
+      transparent: true,
+      opacity: 0.85,
+    })
+  );
+  ring.rotation.x = Math.PI / 2;
+  group.add(ring);
+
+  group.position.set(0, 1.8, 6.2);
+  scene.add(group);
+  sageCompanion = {
+    group,
+    glow,
+    core,
+    ring,
+    phase: Math.random() * Math.PI * 2,
+  };
+}
+
+function getSageHint() {
+  const child = typeof getChild === 'function' ? getChild() : null;
+  if (!child) return { title: 'Sage', body: 'Choose a learner to begin.', tone: 'idle' };
+
+  if (nearBuilding?.userData?.subData?.isHome) {
+    return { title: 'Sage', body: 'Home Base is open. Step inside to see your hub.', tone: 'home' };
+  }
+  if (nearBuilding?.userData?.subData?.isArcade) {
+    return { title: 'Sage', body: 'The Arcade is ready. A challenge run could boost your XP today.', tone: 'arcade' };
+  }
+  if (nearBuilding) {
+    return {
+      title: 'Sage',
+      body: `You are near ${nearBuilding.userData.subject}. Press Space to enter.`,
+      tone: 'subject',
+    };
+  }
+
+  const challenge = typeof getDailyChallenge === 'function' ? getDailyChallenge(child.id) : null;
+  if (challenge && !challenge.completed) {
+    return {
+      title: 'Sage',
+      body: `Today's quest: ${challenge.gameTitle} for ${challenge.topicTitle}. Try the Arcade when you are ready.`,
+      tone: 'quest',
+    };
+  }
+
+  const weather = typeof getWeatherState === 'function' ? getWeatherState(child.id) : { streak: 0 };
+  if (weather.streak >= 2) {
+    return { title: 'Sage', body: `You are on a ${weather.streak}-day streak. Keep the momentum going.`, tone: 'streak' };
+  }
+
+  return { title: 'Sage', body: 'Drive to a building to start learning, or head home to review your progress.', tone: 'idle' };
+}
+
+function updateSageSpeechBubble(hint) {
+  if (!camera || !renderer || !sageCompanion) return;
+  const bubble = document.getElementById('sage-bubble');
+  const title = document.getElementById('sage-title');
+  const text = document.getElementById('sage-text');
+  if (!bubble || !title || !text) return;
+
+  title.textContent = hint.title;
+  text.textContent = hint.body;
+  bubble.dataset.tone = hint.tone;
+
+  const rect = renderer.domElement.getBoundingClientRect();
+  const projected = sageCompanion.group.position.clone().add(new THREE.Vector3(0, 1.15, 0)).project(camera);
+  const visible = projected.z > -1 && projected.z < 1;
+  if (!visible) {
+    bubble.classList.add('hidden');
+    return;
+  }
+
+  const x = (projected.x * 0.5 + 0.5) * rect.width;
+  const y = (-projected.y * 0.5 + 0.5) * rect.height;
+  bubble.style.left = x + 'px';
+  bubble.style.top = y + 'px';
+  bubble.classList.remove('hidden');
+}
+
+function updateSageCompanion(time) {
+  if (!sageCompanion || !carGroup || !camera) return;
+  const target = carGroup.position.clone().add(new THREE.Vector3(-2.2, 0, 2.6));
+  const offset = new THREE.Vector3(
+    Math.sin(time * 1.1 + sageCompanion.phase) * 0.45,
+    1.8 + Math.sin(time * 2.1 + sageCompanion.phase) * 0.22,
+    Math.cos(time * 1.4 + sageCompanion.phase) * 0.35
+  );
+  const nextPos = target.add(offset);
+  sageCompanion.group.position.lerp(nextPos, 0.08);
+  sageCompanion.group.lookAt(camera.position);
+  sageCompanion.ring.rotation.z += 0.025;
+  sageCompanion.core.rotation.y += 0.035;
+  sageCompanion.glow.material.emissiveIntensity = nearBuilding ? 0.62 : 0.45;
+  updateSageSpeechBubble(getSageHint());
 }
 
 function addExpansionLandmarks(tier) {
@@ -1490,6 +1621,7 @@ function animate() {
   updateClouds(time);
   updateTrees(time);
   updateMilestoneAnimations(time);
+  updateSageCompanion(time);
   updateFireworks();
   updateWorldBursts();
 
@@ -1553,9 +1685,13 @@ function animate() {
       bar.classList.remove('hidden');
       enterBtn.style.display = 'block';
       enterBtn.textContent = 'Enter ' + closest.userData.subData.icon;
+      const sagePrompt = document.getElementById('sage-prompt');
+      if (sagePrompt) sagePrompt.textContent = closest.userData.subData.isHome ? 'Sage says: Home is ready.' : 'Sage says: You found your next stop.';
     } else {
       bar.classList.add('hidden');
       enterBtn.style.display = 'none';
+      const sagePrompt = document.getElementById('sage-prompt');
+      if (sagePrompt) sagePrompt.textContent = 'Sage says: Follow the roads to your next lesson.';
     }
   }
 

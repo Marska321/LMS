@@ -86,7 +86,7 @@ Goal from source: make the world feel alive and responsive to grade progression,
 | --- | --- | --- | --- |
 | T4.1 | Grade-based world expansion | `Done` | Implemented in [js/world.js](/C:/Users/User/LMS/js/world.js) with grade-tiered world bounds, expanded road networks, outer district landmarks, denser scenery generation, and minimap scaling so older learners drive through visibly larger campuses. |
 | T4.2 | Home base building | `Done` | Implemented in [js/world.js](/C:/Users/User/LMS/js/world.js) and [js/app.js](/C:/Users/User/LMS/js/app.js) with a dedicated Home Base building in the 3D world, learner-specific house styles, home-model variation, and direct routing into the in-app home hub/dashboard flow. |
-| T4.3 | World AI companion "Sage" | `Todo` | No companion mesh, follow logic, or speech bubble guidance system is present. |
+| T4.3 | World AI companion "Sage" | `Done` | Implemented in [js/world.js](/C:/Users/User/LMS/js/world.js), [index.html](/C:/Users/User/LMS/index.html), and [css/app.css](/C:/Users/User/LMS/css/app.css) with a floating companion mesh, follow behavior around the learner car, projected speech bubble guidance, and context-aware prompts for home, Arcade, challenges, and nearby buildings. |
 
 ## Sprint 5 - Tutor & Centre Layer
 

@@ -96,6 +96,17 @@ html,body{height:100%;overflow:hidden;font-family:'Georgia',serif;background:#1a
   14%{opacity:1}
   100%{opacity:0;transform:translate(-50%,-150%) scale(1.04)}
 }
+.sage-bubble{position:absolute;transform:translate(-50%,-115%);max-width:220px;background:rgba(255,251,240,.96);
+  color:#2f2a24;border:1px solid rgba(168,85,247,.18);border-radius:16px;padding:12px 14px;box-shadow:0 10px 26px rgba(0,0,0,.22);
+  pointer-events:none;transition:opacity .18s,transform .18s}
+.sage-bubble.hidden{opacity:0;transform:translate(-50%,-100%) scale(.96)}
+.sage-bubble::after{content:'';position:absolute;left:50%;bottom:-9px;transform:translateX(-50%) rotate(45deg);width:18px;height:18px;
+  background:rgba(255,251,240,.96);border-right:1px solid rgba(168,85,247,.18);border-bottom:1px solid rgba(168,85,247,.18)}
+.sage-title{font-family:sans-serif;font-size:11px;font-weight:800;letter-spacing:.55px;text-transform:uppercase;color:#8b5cf6;margin-bottom:4px}
+.sage-text{font-family:sans-serif;font-size:12px;line-height:1.55;color:#4b5563}
+.sage-bubble[data-tone="quest"] .sage-title{color:#f97316}
+.sage-bubble[data-tone="home"] .sage-title{color:#16a34a}
+.sage-bubble[data-tone="arcade"] .sage-title{color:#ea580c}
 
 /* ── 3. LMS DASHBOARD ─────────────────────────────────── */
 #screen-lms{background:var(--bg);overflow:hidden;display:flex;flex-direction:column}

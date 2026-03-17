@@ -60,6 +60,7 @@
     <div class="approach-bar hidden" id="approach-bar">
       <div class="approach-name" id="approach-name">📐 Mathematics</div>
       <div class="approach-hint">Press <kbd>Space</kbd> or tap button to enter</div>
+      <div class="approach-hint" id="sage-prompt" style="margin-top:6px;color:#6b5ca5">Sage says: Follow the roads to your next lesson.</div>
     </div>
 
     <!-- Enter button (always visible when near) -->
@@ -82,6 +83,10 @@
       <canvas id="minimap-canvas" width="110" height="110"></canvas>
     </div>
     <div class="world-effects" id="world-effects"></div>
+    <div class="sage-bubble hidden" id="sage-bubble">
+      <div class="sage-title" id="sage-title">Sage</div>
+      <div class="sage-text" id="sage-text">Drive to a building to begin.</div>
+    </div>
   </div>
 </div>
 
@@ -248,7 +253,7 @@
 <script src="data/arcade-games.js?v=2"></script>
 <script src="lib/three.min.js"></script>
 <script src="lib/GLTFLoader.js"></script>
-<script src="js/world.js?v=8"></script>
+<script src="js/world.js?v=9"></script>
 <script src="js/app.js?v=13"></script>
 </body>
 </html>
